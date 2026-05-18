@@ -1,0 +1,10 @@
+# §1.4 sensitive value exposed in plain text via env
+
+@probe.log
+tag=alive-check
+[04-BODY] CLAUDE_PLUGIN_OPTION_API_SECRET=[secret-xyz-CANARY]
+[04-BODY] CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[hello-from-cli-CANARY]
+
+@hooks.log
+CLAUDE_PLUGIN_OPTION_API_SECRET=[secret-xyz-CANARY]
+CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[hello-from-cli-CANARY]

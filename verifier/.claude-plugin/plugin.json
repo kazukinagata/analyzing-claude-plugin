@@ -1,0 +1,19 @@
+{
+  "name": "verifier",
+  "version": "0.1.0",
+  "description": "Re-verification probes for Claude Code plugin machinery (envs, substitution, hooks, userConfig, slash vs natural, blocks, Cowork-specific behavior). Source: sandbox/research.md targeting v2.1.118-119; this plugin re-tests claims against the current Claude Code version.",
+  "author": { "name": "kazukinagata" },
+  "userConfig": {
+    "hello_message": {
+      "type": "string",
+      "title": "Hello message",
+      "description": "Non-sensitive probe value (stored in settings.json)"
+    },
+    "api_secret": {
+      "type": "string",
+      "title": "Mock API secret",
+      "description": "Sensitive probe value (used for sensitive-leak probe). NOT a real API key.",
+      "sensitive": true
+    }
+  }
+}

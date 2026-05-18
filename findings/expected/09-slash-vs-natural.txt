@@ -1,0 +1,9 @@
+# §1.9 / §6.2 slash vs natural-language invocation tags
+
+@probe.log
+tag=alive-check sid=
+
+@hooks.log
+tag=user-prompt-submit
+tag=pretool-skill
+tag=user-prompt-expansion

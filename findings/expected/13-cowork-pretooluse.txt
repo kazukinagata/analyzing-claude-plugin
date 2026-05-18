@@ -1,0 +1,12 @@
+# §2.5 / §2.4 Cowork PreToolUse dead + bash tool name
+# This expected file matches the default hooks.json (no block wired in).
+# For CLI baseline of plugin-level block, swap to hooks-block.json variant
+# (see docs/cowork-runbook.md probe 13 section) and observe that TEST_BASH_OK_MARKER
+# does NOT appear.
+
+@probe.log
+tag=alive-check
+[13-BODY] TEST_BASH_OK_MARKER
+
+@hooks.log
+tag=pretool-bash

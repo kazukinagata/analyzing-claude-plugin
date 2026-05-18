@@ -1,0 +1,30 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "verifier-mp",
+  "owner": { "name": "kazukinagata" },
+  "metadata": {
+    "description": "Local marketplace for re-verifying Claude Code plugin findings"
+  },
+  "plugins": [
+    {
+      "name": "verifier",
+      "source": "./verifier",
+      "description": "Probe plugin for re-verifying findings recorded in research.md"
+    },
+    {
+      "name": "verifier-violator",
+      "source": "./verifier-violator",
+      "description": "Companion plugin used to trigger validator errors (probes 02 and 20)"
+    },
+    {
+      "name": "verifier-violator-userpromptexpansion",
+      "source": "./verifier-violator-userpromptexpansion",
+      "description": "Isolated UserPromptExpansion violator for probe 20"
+    },
+    {
+      "name": "verifier-violator-uppercase-name",
+      "source": "./verifier-violator-uppercase-name",
+      "description": "Isolated kebab-case violator for probe 20"
+    }
+  ]
+}

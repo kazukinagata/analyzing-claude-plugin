@@ -1,0 +1,7 @@
+# §2.9 connected folders + request_cowork_directory.
+# Manual-heavy probe — most observations are user-recorded.
+
+@probe.log
+tag=alive-check
+Write trial: outputs/
+Write trial: plugin dir

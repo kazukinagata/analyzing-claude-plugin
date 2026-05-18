@@ -1,0 +1,8 @@
+# §1.5 userConfig trigger rules — partial auto-checks only.
+# Manual observations (prompt presence / absence) recorded in MASTER-RUNBOOK.
+
+@probe.log
+tag=alive-check
+
+@install.log
+Plugin option

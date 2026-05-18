@@ -1,0 +1,14 @@
+findings/claude-home/
+findings/cli-help/
+findings/v*/
+findings/parser-tests.log
+findings/*.log
+findings/*.lock
+findings/session-marker.txt
+.claude/
+.claude.local/
+node_modules/
+tmp/
+outputs/
+*.zip
+.DS_Store

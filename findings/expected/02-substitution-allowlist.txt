@@ -1,0 +1,21 @@
+# §1.2 / §3.2 substitution allowlist
+# In skill body:
+#   ${CLAUDE_PLUGIN_ROOT/DATA/SKILL_DIR/SESSION_ID} → substituted
+#   ${CLAUDE_PROJECT_DIR} → literal stays
+
+@probe.log
+tag=alive-check
+SUBST_ROOT=[/
+SUBST_DATA=[/
+SUBST_SKILL_DIR=[/
+SUBST_SESSION_ID=[
+SUBST_PROJECT_DIR=[${CLAUDE_PROJECT_DIR}]
+!SUBST_ROOT=[${CLAUDE_PLUGIN_ROOT}]
+
+@install.log
+CLAUDE_PLUGIN_DATA
+
+# NOTE: §1.2 row 3 (frontmatter hook with ${user_config.KEY} → /bin/sh Bad substitution)
+# is verified by invoking /verifier-violator:02c-userconfig-in-frontmatter and
+# observing the Bad substitution error in Claude's tool output. This is a MANUAL
+# check — record the observation in MASTER-RUNBOOK probe 02 section.

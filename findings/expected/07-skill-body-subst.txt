@@ -1,0 +1,7 @@
+# §1.7 skill body substitution: invoke 経路のみ置換
+# Read 経路の判定は MANUAL（07a-read-response.txt の手動レビュー）
+
+@probe.log
+tag=alive-check
+[07-BODY] INVOKE_LINE: PLUGIN_ROOT_VALUE=/
+!INVOKE_LINE: PLUGIN_ROOT_VALUE=${CLAUDE_PLUGIN_ROOT}

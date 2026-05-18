@@ -1,0 +1,19 @@
+# §2.6 Cowork parser whitelist
+#
+# This expected file is for the **CLI baseline** only (hook commands run under
+# /bin/sh, so all 7 parser variants succeed). The patterns below MUST appear
+# in probe.log when assert.sh 14 runs against CLI logs.
+#
+# Cowork inversion: when probe.log was captured on Cowork, PARSER_TEST_AND and
+# PARSER_TEST_OR are expected to be ABSENT (outer-parser split). Record that
+# observation manually in findings/v.../cowork-report.md — assert.sh 14
+# against Cowork logs will therefore return FAIL/PARTIAL, which is itself the
+# finding (do not treat it as a regression).
+
+@probe.log
+tag=alive-check
+PARSER_TEST_BARE
+PARSER_TEST_DQ
+PARSER_TEST_PIPE
+PARSER_TEST_AND
+PARSER_TEST_OR

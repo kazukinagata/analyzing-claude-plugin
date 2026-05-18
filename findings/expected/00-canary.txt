@@ -1,0 +1,15 @@
+# Expected outputs for probe 00-canary
+# CANARY-FAILED is special: if any of these are missing, treat ALL later probes
+# as CANARY-FAILED rather than relying on their individual verdicts.
+
+@probe.log
+tag=alive-check
+tag=fm-registered
+
+@hooks.log
+tag=session-start
+tag=pretool-bash
+tag=user-prompt-submit
+tag=parallel-a-start
+tag=parallel-b-start
+tag=parallel-c-start

@@ -1,0 +1,9 @@
+# §2.11 / §2.12 DATA isolation + REMOTE empty
+
+@probe.log
+tag=alive-check
+[18-BODY] CLAUDE_PLUGIN_ROOT=[/
+[18-BODY] CLAUDE_PLUGIN_DATA=[/
+[18-BODY] CLAUDE_CODE_REMOTE=[(unset)]
+[18-BODY] marker_to_write=[
+[18-BODY] read_back:

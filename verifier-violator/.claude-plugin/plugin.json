@@ -1,0 +1,5 @@
+{
+  "name": "verifier-violator",
+  "version": "0.1.0",
+  "description": "Companion plugin used to trigger validator errors. Provides multiple skills/hooks that intentionally violate substitution rules and naming conventions, used by probes 02 (substitution-allowlist) and 20 (cowork-validation)."
+}

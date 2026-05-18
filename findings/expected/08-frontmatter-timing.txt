@@ -1,0 +1,7 @@
+# §1.8 frontmatter SessionStart+once:true does NOT fire,
+# but frontmatter PreToolUse fires after first invoke.
+
+@probe.log
+tag=alive-check
+[08-FM-PreToolUse fired]
+!08-FM-SESSIONSTART unexpected fire

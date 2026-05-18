@@ -1,0 +1,14 @@
+# §1.10 parallel hook firing
+# All three start lines should appear; finish ordering (c < a < b)
+# is verified by manual review of the timestamps.
+
+@probe.log
+tag=alive-check
+
+@hooks.log
+tag=parallel-a-start
+tag=parallel-b-start
+tag=parallel-c-start
+tag=parallel-a-end
+tag=parallel-b-end
+tag=parallel-c-end

@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/log.sh\" session-start" },
+          { "type": "command", "command": "echo PARSER_TEST_BARE >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_DQ\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_SEMI; echo PARSER_TEST_SEMI_X\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_PIPE | cat\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"x=foo; echo PARSER_TEST_VAR_$x\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"true && echo PARSER_TEST_AND\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" },
+          { "type": "command", "command": "bash -c \"false || echo PARSER_TEST_OR\" >> \"${CLAUDE_PROJECT_DIR}/findings/parser-tests.log\"" }
+        ]
+      }
+    ]
+  }
+}

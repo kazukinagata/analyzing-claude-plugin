@@ -1,0 +1,6 @@
+{
+  "name": "Verifier-Violator-Uppercase",
+  "version": "0.1.0",
+  "description": "Standalone plugin whose name violates kebab-case. CLI should reject with a specific error; Cowork is expected to reject with a generic message (research section 2.3).",
+  "author": { "name": "kazukinagata" }
+}

@@ -1,0 +1,6 @@
+# §2.4 11-block-target should NOT run (its alive-check should be absent)
+# when invoked after 12-block-self via natural-language.
+
+@probe.log
+[12-BODY
+!11-BODY

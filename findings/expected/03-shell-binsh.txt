@@ -1,0 +1,9 @@
+# §1.3 hook command runs under /bin/sh (dash)
+
+@probe.log
+tag=alive-check
+[03-binsh] BASH_VERSION=[]
+[03-binsh] RANDOM=[]
+[03-binsh] [[ syntax error
+[03-binsh] ^^ syntax error
+/bin/sh -> /

@@ -1,0 +1,6 @@
+{
+  "name": "verifier-violator-userpromptexpansion",
+  "version": "0.1.0",
+  "description": "Standalone plugin that registers UserPromptExpansion. CLI should accept it; Cowork validation should reject the whole plugin (research section 2.3).",
+  "author": { "name": "kazukinagata" }
+}

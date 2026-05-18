@@ -1,0 +1,6 @@
+@probe.log
+[12-BODY
+tag=alive-check (self-blocker registered)
+
+@hooks.log
+tag=pretool-skill

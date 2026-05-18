@@ -1,0 +1,17 @@
+# §1.1 env propagation across 3 tiers
+
+@probe.log
+tag=alive-check
+tag=fm-registered
+[01-BODY] CLAUDE_PLUGIN_ROOT=[(unset)]
+[01-BODY] CLAUDE_PLUGIN_DATA=[(unset)]
+[01-BODY] CLAUDE_CODE_ENTRYPOINT=[cli]
+DATA=[(empty)]
+OPT_HELLO=[(empty)]
+OPT_SECRET=[(empty)]
+
+@hooks.log
+tag=session-start
+CLAUDE_PLUGIN_ROOT=[
+CLAUDE_PLUGIN_DATA=[
+CLAUDE_PROJECT_DIR=[

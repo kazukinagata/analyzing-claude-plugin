@@ -1,0 +1,10 @@
+# §1.8 self-block companion to 08-frontmatter-timing.
+# Self-blocking own load is impossible — 08b's first invoke must succeed.
+# A second invoke (after the frontmatter hook is registered) should be
+# blocked. The frontmatter hook writes a tag=block-emitted line to probe.log
+# in addition to emitting the JSON block decision to stdout.
+
+@probe.log
+tag=alive-check (this proves 08b loaded
+[08b-BODY
+tag=block-emitted reason="blocked by 08b-self-block-attempt"

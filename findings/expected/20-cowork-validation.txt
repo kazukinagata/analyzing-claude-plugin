@@ -1,0 +1,7 @@
+# §2.3 CLI validation specific vs Cowork generic.
+
+@probe.log
+tag=alive-check
+=== 20a: UserPromptExpansion variant plugin ===
+=== 20b: uppercase plugin name variant ===
+Validating plugin manifest:

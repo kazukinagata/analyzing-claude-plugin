@@ -1,0 +1,8 @@
+# §2.7 hook file I/O reaches the shell sandbox on CLI but not on Cowork.
+# Both environments should at least show 15-FM-hook in probe.log (hook ran),
+# but only CLI shows the /tmp/file-io-canary-*.txt files via ls.
+
+@probe.log
+tag=alive-check
+[15-FM-hook fired marker_path=/tmp/file-io-canary-
+/tmp/file-io-canary-

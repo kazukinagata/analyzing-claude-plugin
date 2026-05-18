@@ -1,0 +1,8 @@
+# §2.8 path 3 forms — CLI baseline: all paths equal.
+# Cowork: Windows / MSYS / Linux-mount paths differ (regex'd in report.md).
+
+@probe.log
+tag=alive-check
+[16-BODY BODY_SUBST] ROOT=[/
+[16-FM HOOK_SUBST] ROOT=[/
+[16-FM HOOK_ENV] ROOT=[/

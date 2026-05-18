@@ -1,0 +1,7 @@
+# §1.6 marketplace cache vs runtime path
+# Three possible verdicts (assert.sh maps to PASS/DOC-ALIGNED/UNKNOWN).
+# PASS expectation: "VERDICT=PASS (root != cache, finding holds: source path used at runtime)"
+
+@probe.log
+tag=alive-check
+VERDICT=PASS (root != cache

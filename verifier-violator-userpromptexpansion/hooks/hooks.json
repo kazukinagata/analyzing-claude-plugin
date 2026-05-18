@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          { "type": "command", "command": "echo '[20a violator] UserPromptExpansion event registered'" }
+        ]
+      }
+    ]
+  }
+}
