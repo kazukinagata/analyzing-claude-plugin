@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="v$(claude --version 2>/dev/null | awk "{print \$1}")"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[16-FM HOOK_SUBST] ROOT=[${CLAUDE_PLUGIN_ROOT}]\n[16-FM HOOK_ENV] ROOT=[%s] DATA=[%s]\n" "${CLAUDE_PLUGIN_ROOT:-(empty)}" "${CLAUDE_PLUGIN_DATA:-(empty)}" >> "$out_dir/probe.log"'
+          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="${VERIFIER_VERSION_DIR:-v-unknown}"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[16-FM HOOK_SUBST] ROOT=[${CLAUDE_PLUGIN_ROOT}]\n[16-FM HOOK_ENV] ROOT=[%s] DATA=[%s]\n" "${CLAUDE_PLUGIN_ROOT:-(empty)}" "${CLAUDE_PLUGIN_DATA:-(empty)}" >> "$out_dir/probe.log"'
 ---
 
 # 16-cowork-path-forms
@@ -18,7 +18,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"

@@ -14,7 +14,7 @@ user-invocable: true
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"

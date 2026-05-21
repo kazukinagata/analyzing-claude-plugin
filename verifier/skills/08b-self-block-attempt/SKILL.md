@@ -7,7 +7,7 @@ hooks:
     - matcher: "Skill"
       hooks:
         - type: command
-          command: 'ver="v$(claude --version 2>/dev/null | awk "{print \$1}")"; sid="${CLAUDE_SESSION_ID:-no-sid}"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[08b-FM %s] tag=block-emitted reason=\"blocked by 08b-self-block-attempt\"\n" "$(date -Iseconds)" >> "$out_dir/probe.log"; printf ''{"decision":"block","reason":"blocked by 08b-self-block-attempt (testing whether self-blocking works)"}\n'''
+          command: 'ver="${VERIFIER_VERSION_DIR:-v-unknown}"; sid="${CLAUDE_SESSION_ID:-no-sid}"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[08b-FM %s] tag=block-emitted reason=\"blocked by 08b-self-block-attempt\"\n" "$(date -Iseconds)" >> "$out_dir/probe.log"; printf ''{"decision":"block","reason":"blocked by 08b-self-block-attempt (testing whether self-blocking works)"}\n'''
 ---
 
 # 08b-self-block-attempt
@@ -18,7 +18,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"

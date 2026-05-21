@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: '{ printf "[03-FM-bashisms %s] BASH_VERSION=[%s] uppercased=[${PWD^^}]\n" "$(date -Iseconds)" "$BASH_VERSION" 2>&1; } >> "$CLAUDE_PROJECT_DIR/findings/v$(claude --version 2>/dev/null | awk "{print \$1}")/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>&1'
+          command: '{ printf "[03-FM-bashisms %s] BASH_VERSION=[%s] uppercased=[${PWD^^}]\n" "$(date -Iseconds)" "$BASH_VERSION" 2>&1; } >> "$CLAUDE_PROJECT_DIR/findings/${VERIFIER_VERSION_DIR:-v-unknown}/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>&1'
 ---
 
 # 03-shell-binsh
@@ -18,7 +18,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
@@ -35,7 +35,7 @@ mkdir -p "$out_dir"
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 echo "=== probe.log (shell test) ==="
 tail -n 30 "$proj/findings/$ver/$sid/probe.log"

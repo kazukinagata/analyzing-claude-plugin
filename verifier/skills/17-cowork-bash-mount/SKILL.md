@@ -12,7 +12,7 @@ user-invocable: true
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
@@ -36,7 +36,7 @@ echo "Pattern A: cd $skill_dir && bash scripts/say-hi.sh" | tee -a "$out_dir/pro
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 echo "Pattern B: bash \"${CLAUDE_SKILL_DIR}/scripts/say-hi.sh\"" | tee -a "$out_dir/probe.log"
@@ -47,7 +47,7 @@ bash "${CLAUDE_SKILL_DIR}/scripts/say-hi.sh" 2>&1 | tee -a "$out_dir/probe.log" 
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 before_pwd_listing=$(ls "$PWD" 2>/dev/null | head -20)

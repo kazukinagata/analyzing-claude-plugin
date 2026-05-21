@@ -20,7 +20,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
@@ -31,7 +31,7 @@ printf '[00-canary-body %s] tag=alive-check sid=%s\n' "$(date -Iseconds)" "$sid"
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 echo "=== hooks.log ($proj/findings/$ver/$sid/hooks.log) ==="
 ls -la "$proj/findings/$ver/$sid/" 2>&1

@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="v$(claude --version 2>/dev/null | awk "{print \$1}" || echo unknown)"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[01-FM %s] tag=fm-registered ROOT=[%s] DATA=[%s] PROJECT_DIR=[%s] OPT_HELLO=[%s] OPT_SECRET=[%s] SESSION_ID=[%s]\n" "$(date -Iseconds)" "${CLAUDE_PLUGIN_ROOT:-(empty)}" "${CLAUDE_PLUGIN_DATA:-(empty)}" "${CLAUDE_PROJECT_DIR:-(empty)}" "${CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE:-(empty)}" "${CLAUDE_PLUGIN_OPTION_API_SECRET:-(empty)}" "${CLAUDE_SESSION_ID:-(empty)}" >> "$out_dir/probe.log"'
+          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="${VERIFIER_VERSION_DIR:-v-unknown}"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[01-FM %s] tag=fm-registered ROOT=[%s] DATA=[%s] PROJECT_DIR=[%s] OPT_HELLO=[%s] OPT_SECRET=[%s] SESSION_ID=[%s]\n" "$(date -Iseconds)" "${CLAUDE_PLUGIN_ROOT:-(empty)}" "${CLAUDE_PLUGIN_DATA:-(empty)}" "${CLAUDE_PROJECT_DIR:-(empty)}" "${CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE:-(empty)}" "${CLAUDE_PLUGIN_OPTION_API_SECRET:-(empty)}" "${CLAUDE_SESSION_ID:-(empty)}" >> "$out_dir/probe.log"'
 ---
 
 # 01-env-propagation
@@ -20,7 +20,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
@@ -45,7 +45,7 @@ mkdir -p "$out_dir"
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 echo "=== hooks.log tail (plugin-level env snapshot) ==="
 tail -n 80 "$proj/findings/$ver/$sid/hooks.log"

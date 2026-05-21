@@ -25,7 +25,7 @@ mkdir -p "$CLAUDE_CONFIG_DIR"
 # Version string used for finding output directory. Resolved lazily so a missing
 # claude binary doesn't break sourcing.
 verifier_version_dir() {
-  v="$(claude --version 2>/dev/null | awk '{print $1}')"
+  v="$(claude --version 2>/dev/null | cut -d' ' -f1)"
   if [ -n "$v" ]; then
     printf 'v%s' "$v"
   else
@@ -38,9 +38,32 @@ if [ -n "${BASH_VERSION:-}" ]; then
 fi
 export VERIFIER_REPO_ROOT="$__VERIFIER_REPO_ROOT"
 
-# Share Claude account credentials with the isolated CLAUDE_CONFIG_DIR so
-# `claude --plugin-dir ./verifier` doesn't re-prompt for login. Plugin and
-# settings.json stay isolated; only the auth blob is shared via symlink.
+# Export VERIFIER_VERSION_DIR as a plain env var so child processes (claude,
+# Bash tool subprocesses, hooks) can read it without re-running awk/cut.
+# Skill body markdown was getting "$1" stripped by Claude Code's pre-
+# substitution, which corrupted the version dir name; this avoids that
+# entirely.
+VERIFIER_VERSION_DIR="$(verifier_version_dir)"
+export VERIFIER_VERSION_DIR
+
+# Share Claude account credentials AND startup state with the isolated
+# CLAUDE_CONFIG_DIR so `claude --plugin-dir ./verifier` doesn't re-prompt
+# for login or replay the first-run welcome flow.
+#
+# - .credentials.json: OAuth tokens (symlink, so refresh tokens stay in sync)
+# - .claude.json: numStartups / onboarding flags / oauthAccount blob (symlink;
+#   the isolated home reuses the host's startup state but plugin/settings
+#   isolation stays intact because ~/.claude/plugins/ and settings.json live
+#   inside CLAUDE_CONFIG_DIR, not at $HOME/.claude.json).
 if [ -f "$HOME/.claude/.credentials.json" ] && [ ! -e "$CLAUDE_CONFIG_DIR/.credentials.json" ]; then
   ln -sfn "$HOME/.claude/.credentials.json" "$CLAUDE_CONFIG_DIR/.credentials.json"
+fi
+if [ -f "$HOME/.claude.json" ]; then
+  # If a stub .claude.json was left behind from a previous launch (under ~1KB
+  # vs host's 100KB+), replace it with a symlink so the welcome flow stays
+  # marked as completed.
+  if [ ! -e "$CLAUDE_CONFIG_DIR/.claude.json" ] || [ "$(wc -c <"$CLAUDE_CONFIG_DIR/.claude.json" 2>/dev/null || echo 0)" -lt 2048 ]; then
+    rm -f "$CLAUDE_CONFIG_DIR/.claude.json"
+    ln -sfn "$HOME/.claude.json" "$CLAUDE_CONFIG_DIR/.claude.json"
+  fi
 fi

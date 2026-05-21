@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="v$(claude --version 2>/dev/null | awk "{print \$1}" || echo unknown)"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[02-FM %s] tag=fm-registered\n" "$(date -Iseconds)" >> "$out_dir/probe.log"'
+          command: 'sid="${CLAUDE_SESSION_ID:-no-sid}"; ver="${VERIFIER_VERSION_DIR:-v-unknown}"; out_dir="$CLAUDE_PROJECT_DIR/findings/$ver/$sid"; mkdir -p "$out_dir"; printf "[02-FM %s] tag=fm-registered\n" "$(date -Iseconds)" >> "$out_dir/probe.log"'
 ---
 
 # 02-substitution-allowlist
@@ -26,7 +26,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
@@ -44,7 +44,7 @@ mkdir -p "$out_dir"
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 echo "=== install.log (search for validator block) ==="
 grep -E "plugin-only|CLAUDE_PLUGIN_DATA|skill hooks|Bad substitution" "$proj/findings/$ver/install.log" 2>&1 || echo "no install.log yet (run install-marketplace.sh first)"
 echo

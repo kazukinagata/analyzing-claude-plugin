@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: 'ts=$(date +%s%N); marker_path="/tmp/file-io-canary-$ts.txt"; printf "[15-FM marker_path=%s wrote_at=%s]" "$marker_path" "$(date -Iseconds)" > "$marker_path" 2>/dev/null; printf "[15-FM-hook fired marker_path=%s]\n" "$marker_path" >> "$CLAUDE_PROJECT_DIR/findings/v$(claude --version 2>/dev/null | awk "{print \$1}")/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>/dev/null'
+          command: 'ts=$(date +%s%N); marker_path="/tmp/file-io-canary-$ts.txt"; printf "[15-FM marker_path=%s wrote_at=%s]" "$marker_path" "$(date -Iseconds)" > "$marker_path" 2>/dev/null; printf "[15-FM-hook fired marker_path=%s]\n" "$marker_path" >> "$CLAUDE_PROJECT_DIR/findings/${VERIFIER_VERSION_DIR:-v-unknown}/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>/dev/null'
 ---
 
 # 15-cowork-file-io
@@ -18,7 +18,7 @@ hooks:
 
 ```bash
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
-ver="v$(claude --version 2>/dev/null | awk '{print $1}' || echo unknown)"
+ver="${VERIFIER_VERSION_DIR:-v-unknown}"
 sid="${CLAUDE_SESSION_ID:-no-sid}"
 out_dir="$proj/findings/$ver/$sid"
 mkdir -p "$out_dir"
