@@ -447,6 +447,62 @@ ROOT='${CLAUDE_PLUGIN_ROOT}'    # Claude Code が pre-substitute するので実
 + v2.1.146 で確認：`installed_plugins.json` の `installPath` 自体は cache を指す形で記録されるため metadata と runtime path の不整合がある。`claude plugin update` は version 比較のみで content hash を見ないので、開発中の SKILL.md 編集を反映させるには `claude plugin uninstall ... -y && claude plugin install ...` で cache を強制再生成する必要がある（ただし runtime は source 読みなので大半のケースで cache 状態は無視可能）。
 ```
 
+## probe 07-skill-body-subst （§1.7）
+
+`./scripts/assert.sh 07` → **PASS (3/3 matched)**
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| **Read tool 経由で SKILL.md を読むと `${VAR}` は literal で残る** | ✅ literal | ✅ literal — 下記 Step A の verbatim | PASS |
+| **`/verifier:07-...` で invoke すると `${CLAUDE_PLUGIN_ROOT}` が絶対 path に substituted** | ✅ substituted | ✅ `/home/kazukinagata/projects/analyzing-claude-plugin/verifier` | PASS |
+| substituted は **invoke 経路の context load 時点** に発生 | ✅（推定） | ✅ 下記 Claude の発言「skill body reached me with substitution already applied」と整合 | PASS |
+
+### Step A — Read 経路（verbatim 引用）
+
+claude にプロンプトで「`verifier/skills/07-skill-body-subst/SKILL.md` ファイルを Read tool で読んで、その中で `"CHECK_LINE:"` で始まる行を**そのまま**コピーして見せてください」と依頼。
+
+Claude の返答：
+
+```
+CHECK_LINE: PLUGIN_ROOT_VALUE=${CLAUDE_PLUGIN_ROOT}
+```
+
+`${CLAUDE_PLUGIN_ROOT}` は展開されずリテラルで返ってきた。
+
+### Step B — Invoke 経路
+
+`/verifier:07-skill-body-subst` を実行。probe.log に出た行：
+
+```
+[07-BODY] INVOKE_LINE: PLUGIN_ROOT_VALUE=/home/kazukinagata/projects/analyzing-claude-plugin/verifier
+```
+
+substituted（probe 02 SUBST_ROOT と同じ source path）。
+
+### Claude 自身の観察
+
+Step B で Claude が補足した発言：
+
+> The CHECK_LINE shows PLUGIN_ROOT_VALUE=/home/kazukinagata/projects/analyzing-claude-plugin/verifier — i.e., `${CLAUDE_PLUGIN_ROOT}` was already substituted to the literal path **before the skill body reached me**.
+
+これは Claude Code が **invoke 経路で context load 直前** に substitute する設計と整合（research §1.7 / §3.2 のバイナリ調査結果と一致）。
+
+### 含意
+
+- **`${CLAUDE_PLUGIN_ROOT}` の表記を SKILL body に書くと、ユーザが Read tool で skill ファイルを覗いた時に literal、invoke で起動した時に絶対 path、という二重の見え方**になる。documentation 用途で path を見せたい場合は両方の挙動を念頭に書くべき
+- plugin 作者の debug：ユーザに「skill 起動して、`${CLAUDE_PLUGIN_ROOT}` の値を echo して」と頼めば実 path を取れる（Read 依頼だと literal）
+- v2.1.146 でも research §1.7 のバイナリ実装（`R.replace(/\$\{CLAUDE_SKILL_DIR\}/g, ...)` 等）が機能している
+
+### 研究 §1.7 改訂提案
+
+```diff
+- skill body markdown の `${CLAUDE_PLUGIN_ROOT}` 等は **skill が invoke されて context に load される時点**でランタイムが substitute する。**Read/Grep tool で SKILL.md をファイルとして読む経路では literal のまま**。
++ skill body markdown の `${CLAUDE_PLUGIN_ROOT}` 等は **skill が invoke されて context に load される時点**でランタイムが substitute する。**Read/Grep tool で SKILL.md をファイルとして読む経路では literal のまま**。
++ v2.1.146 で確認：Claude (LLM) も「skill body reached me with substitution already applied」と認識しており、context load 直前の substitution というメカニズムが維持されている。
+```
+
 ---
 
-(以降、probe 07-21 を回しながら追記)
+(以降、probe 08-21 を回しながら追記)
