@@ -131,7 +131,7 @@ PreToolUse:Bash hook error:
 
 これで以下が同時に PASS 確定：
 
-1. **§1.2 row 3**：skill frontmatter での `${user_config.KEY}` は ranatime 置換されず literal で `/bin/sh` に到達
+1. **§1.2 row 3**：skill frontmatter での `${user_config.KEY}` は **userConfig の設定状態と無関係に** runtime 置換されず、literal で `/bin/sh` に到達。Claude Code は plugin-level hook では `${user_config.KEY}` を置換するが、skill frontmatter hook では一切置換しない仕様（plugin-only な置換）。今回の観察時 userConfig は未設定（`CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[(unset)]` を hooks.log で確認）だが、設定済でも結果は同じになる
 2. **§1.3**：hook 実行 shell は `/bin/sh` (dash)。`${var.key}` の `.` を不正 parameter expansion として弾く
 3. **§1.8**：skill frontmatter hook は **invoke 後** に登録される。02c invoke → 直後の Bash 呼び出しで PreToolUse:Bash が発火
 4. **§2.4 / decision:block** に類似：PreToolUse hook が exit code 非ゼロを返すと tool 呼び出し全体が block される（02c のケースでは hook command が `/bin/sh` で失敗 → exit 非ゼロ → echo がブロック）
