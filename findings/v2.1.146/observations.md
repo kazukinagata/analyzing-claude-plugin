@@ -307,6 +307,80 @@ probe 04 の試行錯誤で判明したフロー：
 + settings.json を direct edit する場合は `.options` 入れ子を忘れると runtime が拾わない
 ```
 
+## probe 05-userconfig-trigger （§1.5）
+
+`./scripts/assert.sh 05` → **PARTIAL (matched=1, missing=1)** （automation 上は 1 件のみ自動判定。残りは手動観察）
+
+### route 単位の判定
+
+| § route | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| route 1: `claude plugin install` / `enable`（CLI shell） | silent（no prompt） | silent（`install-marketplace.sh` 実行で prompt 無し、両 plugin install 成功） | PASS |
+| route 2: `/plugins` UI → Configure options 手動入力 | 入力フォーム表示 | 入力フォーム表示（probe 04 で実際に値入力済）。`Hello message` / `Mock API secret` の 2 項目 + `Save configuration` ボタン | PASS |
+| route 3: `/plugins` で disable → enable（参照あり + 未設定なら prompt） | 条件付き prompt | **silent 観察**（現状：参照無し + 値設定済の組み合わせ） → 「prompt 不要」のケースなので silent は研究と整合 | PASS（条件付き — fully test には参照あり + 値 unset の状態が必要） |
+| route 4: 参照あり + 値未設定で hook が走った場合 → `Plugin option "X" isn't set.` エラー | hook error | **未直接観察**：現在 hooks.json に `${user_config.*}` の plugin-level 参照無し（canary 安定化のため削除済、blocker #1 fix の経緯）。02c-userconfig-in-frontmatter は frontmatter 参照なので `Bad substitution`（research §1.2）になり別 error class | DEFERRED — verifier に plugin-level reference を一時追加する隔離 probe が必要 |
+
+### /plugins UI の v2.1.146 挙動
+
+- **タブ構成**：`Discover` / `Installed` / `Marketplaces` / `Errors`（Tab キーで移動）
+- **Installed** タブで verifier@verifier-mp の Local section にカーソル移動 → Enter で詳細
+- 詳細画面の action：`Disable plugin` / `Add to favorites` / `Mark for update` / `Configure options` / `Update now` / `Uninstall` / `Back to plugin list`
+- `Configure options` を選ぶと userConfig フィールドが list 表示される。非機密値は平文表示、sensitive 値は `(unchanged)` のように mask 表示
+- enable 操作後は `Run /reload-plugins to apply.` のヒントが表示される（v2.1.146 で `/reload-plugins` を打つ必要あり）
+
+### Configure options UI で観察された詳細
+
+```
+Configure verifier
+Plugin options
+  ❯ Hello message    hello-from-cli-CANARY      <- 非機密、現在値が平文表示
+    Mock API secret  (unchanged)                <- 機密、masked
+    Save configuration
+Non-sensitive probe value (stored in settings.json)
+```
+
+description のヘルプテキスト（"Non-sensitive probe value..."）も画面下部に表示される。
+
+### disable → enable 観察
+
+```
+✓ Enabled verifier. Run /reload-plugins to apply.
+```
+
+prompt は出ず。**ただしこれは「参照無し + 値設定済」の組み合わせなので、研究 §1.5 row 3 の「参照あり + 値未設定」分岐を test できているわけではない**。
+
+### 副次的な観察
+
+- `/plugins` Installed タブには **ホスト `~/.claude.json` 由来の MCP servers**（Notion, Slack, Atlassian Rovo, Google Calendar, Gmail, Google Drive 等）も表示された。`CLAUDE_CONFIG_DIR` を `findings/claude-home` に redirect しても `.claude.json` の symlink でホスト側 MCP state が共有されているため。検証用途では問題なし（ノイズだけ）
+
+### 残課題（probe 05 完全カバーには）
+
+route 4 を auto-test するには：
+
+1. `verifier-violator/hooks/hooks.json` に plugin-level `SessionStart` で `echo "${user_config.X}"` 参照を仕込む（X は値未設定の任意キー）
+2. その violator を install
+3. session 起動 → `Plugin option "X" isn't set.` エラーが出るか観察
+
+または現在の `verifier-violator/skills/02c-userconfig-in-frontmatter/SKILL.md` を plugin-level hook 版に作り直す。
+
+これは observations.md に「**route 4 deferred — verifier-violator-userconfig-pluginlevel という第 5 の独立 plugin variant が必要**」として記録。次の検証 round で対応するか、現実装で「research §1.5 row 4 は手動 setup が必要」を許容するかは判断保留。
+
+### 研究 §1.5 改訂提案
+
+```diff
+  | 操作 | prompt 表示 |
+  |---|---|
+- | `claude plugin install` / `enable`（CLI シェル） | ❌ silent |
++ | `claude plugin install` / `enable`（CLI シェル） | ❌ silent（v2.1.146 / WSL Ubuntu 実測 PASS） |
+- | `/plugins` UI → Configure options（手動） | ✅ 入力フォーム |
++ | `/plugins` UI → Configure options（手動） | ✅ 入力フォーム（v2.1.146 では `Installed → ❯ verifier → Configure options` の階層） |
+  | `/plugins` UI → disable → enable | プラグインのどこかで `${user_config.KEY}` が参照されており、かつ値が未設定の場合のみ ✅ |
+- | 参照されていて値未設定で hook が走った場合 | hook error（`Plugin option "X" isn't set.`） |
++ | 参照されていて値未設定で hook が走った場合 | hook error（`Plugin option "X" isn't set.`） — v2.1.146 では未直接観察、verifier 本体から user_config 参照を canary 安定化のため削除済、隔離 probe で再検証する必要あり |
++
++ v2.1.146 で確認できなかった条件：route 3/4 の「参照あり + 値未設定」分岐。参照を持つ別 plugin variant を作って再観察すべき。
+```
+
 ---
 
-(以降、probe 05-21 を回しながら追記)
+(以降、probe 06-21 を回しながら追記)
