@@ -76,6 +76,17 @@
 - `findings/v2.1.146/no-sid/probe.log` — `[01-FM]` `[01-BODY]` 行
 - 全 12 件の expected pattern が matched（`findings/expected/01-env-propagation.txt`）
 
+### probe 01 後の追加検証（次 probe で確認予定）
+
+probe 01 では `CLAUDE_CODE_SESSION_ID` が Bash tool subprocess に届くことを確認したが、plugin-level hook / skill frontmatter hook の env で見えるかは未検証だった（`log.sh` の dump 対象に含めていなかったため）。
+
+→ `verifier/hooks/log.sh` の env dump リストに以下を追加：
+- `CLAUDE_CODE_SESSION_ID`
+- `CLAUDE_CODE_ENABLE_TELEMETRY`
+- `CLAUDE_EFFORT`
+
+次以降の probe で plugin-level hook の hooks.log にこれらの値が出るかを確認し、§1.1 表を完成させる。
+
 ### 研究 §1.1 改訂提案
 
 ```diff
