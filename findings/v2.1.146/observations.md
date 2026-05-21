@@ -164,6 +164,54 @@ PreToolUse:Bash hook error:
 + 実際のフック実行時に shell エラー（/bin/sh: Bad substitution 等）として顕在化する形に変わった。
 ```
 
+## probe 03-shell-binsh （§1.3）
+
+`./scripts/assert.sh 03` → **PASS (7/7 matched)**（expected の format ミスマッチ修正後）
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| hook 実行 shell は `/bin/sh` | ✅ dash 想定 | ✅ `/usr/bin/dash` （`readlink -f /bin/sh`） | PASS |
+| `/bin/sh -c` で `BASH_VERSION` 空 | ✅ | ✅ `BASH_VERSION=[]` | PASS |
+| `/bin/sh -c` で `$RANDOM` 空 | ✅（dash 非対応） | ✅ `RANDOM=[]` | PASS |
+| `[[ ]]` 構文で syntax error | ✅ | ✅ `/bin/sh: 1: [[: not found` | PASS |
+| `${PWD^^}` で Bad substitution | ✅ | ✅ `/bin/sh: 1: Bad substitution` | PASS |
+| frontmatter hook 内の bashism がエラー | （明示的観察なし） | ✅ `[03-FM-bashisms ...]` の printf 自体が ${PWD^^} の expansion 失敗で実行されず、代わりに `/bin/sh: 1: Bad substitution` だけが log に流れる（hook stderr の 2>&1 redirect 経由） | NEW (bonus 観察) |
+
+### probe 03 で学んだメタな設計教訓
+
+**frontmatter hook で意図的に失敗するコマンドを書くと PreToolUse:Bash の exit 非ゼロが伝播し Bash tool 全体が block される**：
+
+- 初回試行ではこの問題で skill body が一切走らなかった
+- 修正：`command: '... ; exit 0'` を追加して hook が常に 0 で終わるようにする
+- 同じパターンで失敗するコマンドを置く probe（02c 含む将来の probe）は同じ`; exit 0` イディオムを使う必要あり
+
+### Claude plugin update / cache の挙動（probe 06 の前哨観察）
+
+probe 03 を修正する過程で判明：
+
+1. **`claude plugin update verifier@verifier-mp -s local` は version 番号で判定** — plugin.json の version を bump しない限り「already at latest version」と返って cache を更新しない。content hash や git commit sha は見ない
+2. **`installed_plugins.json` には `installPath` が cache を指している**にもかかわらず、probe 02 では `CLAUDE_PLUGIN_ROOT` が source path を返した → runtime は source 読み（or 両方読む）。**probe 06 で確定する**
+3. 開発ループでは **uninstall + reinstall が cache 強制更新の手段** — verifier の SKILL.md 修正後 `claude plugin uninstall ... -y && claude plugin install ...` で cache が再生成
+
+### 根拠 log
+
+- `findings/v2.1.146/no-sid/probe.log` 行末から逆順 ~15 行（`[03-BODY]` および `/bin/sh: 1: Bad substitution`）
+
+### 研究 §1.3 改訂提案
+
+```diff
+- hook の `command` は **`/bin/sh` で実行される**（bash ではない）。
+- **根拠**：`${user_config.hello_message}` を skill frontmatter hook に書いた際のエラーメッセージ：
+- /bin/sh: 1: Bad substitution
++ hook の `command` は **`/bin/sh` で実行される**（bash ではない）。v2.1.146 (WSL Ubuntu) では `/bin/sh -> /usr/bin/dash`。
++ **根拠**：`${PWD^^}`（bash 固有 uppercase 修飾）や `[[ ]]` を hook command に書くと
++ `/bin/sh: 1: Bad substitution` / `/bin/sh: 1: [[: not found` が出る（probe 03 で実測）。
++ また、frontmatter hook の command が `; exit 0` を付けずに失敗すると、PreToolUse:Bash の
++ exit 非ゼロが Bash tool 全体を block するため、意図的失敗コマンドは exit 0 を強制する idiom が必要。
+```
+
 ---
 
-(以降、probe 03-21 を回しながら追記)
+(以降、probe 04-21 を回しながら追記)

@@ -2,8 +2,9 @@
 
 @probe.log
 tag=alive-check
-[03-binsh] BASH_VERSION=[]
-[03-binsh] RANDOM=[]
-[03-binsh] [[ syntax error
-[03-binsh] ^^ syntax error
+BASH_VERSION=[]
+RANDOM=[]
+[[ syntax error
+^^ syntax error
 /bin/sh -> /
+Bad substitution
