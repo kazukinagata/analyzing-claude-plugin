@@ -381,6 +381,72 @@ route 4 を auto-test するには：
 + v2.1.146 で確認できなかった条件：route 3/4 の「参照あり + 値未設定」分岐。参照を持つ別 plugin variant を作って再観察すべき。
 ```
 
+## probe 06-marketplace-cache （§1.6）
+
+`./scripts/assert.sh 06` → **PASS (2/2 matched)**（ただし比較ロジックに難あり、結論は他の証拠と合わせて正しい）
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 主張 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| docs：cache copies are used at runtime | (docs 記述) | — | reference |
+| **observation**：cache はコピー作成されるが runtime は **source path** を使う | ✅ source 使用 | ✅ probe 02 の SUBST_ROOT = `/home/.../verifier`（source）, cache_dir = `findings/.../cache/verifier-mp/verifier/0.1.0`（別 path） | PASS — finding 維持、docs との矛盾は v2.1.146 でも継続 |
+| `installed_plugins.json.installPath` は cache を指す | （研究で明示せず） | ✅ `installPath: findings/.../cache/verifier-mp/verifier/0.1.0`（実測） | NEW supporting evidence — metadata と runtime path の不整合 |
+
+### v2.1.146 実測
+
+`findings/claude-home/plugins/cache/verifier-mp/` 配下に各 plugin 0.1.0 dir が作られ、source の copy が置かれている：
+- `verifier/0.1.0/.claude-plugin/plugin.json`
+- `verifier-violator/0.1.0/.claude-plugin/plugin.json`
+
+しかし runtime の `${CLAUDE_PLUGIN_ROOT}` は source path (`verifier/` 直下) を返す。これは：
+- probe 02 SUBST_ROOT = `/home/kazukinagata/projects/analyzing-claude-plugin/verifier` で confirmed
+- log.sh の env dump でも `CLAUDE_PLUGIN_ROOT=/home/.../verifier` (source) と表示
+
+### probe 03 で観察した cache 更新の挙動と組み合わせて
+
+- `claude plugin update` は version 比較のみで content hash や git SHA を見ない（probe 03 で記録）
+- そのため source 側を編集しても `plugin update` では cache が再生成されない
+- `claude plugin uninstall ... && install ...` で cache 強制再生成
+- ただし **runtime が source 読みなので、cache の stale 状態自体は実害がない**（probe 03 で SKILL.md 修正後すぐ反映できたのもこのため）
+
+→ 「cache は実質 dead data」。`installed_plugins.json.installPath` が cache を指すのは misleading なメタデータ。
+
+### probe 06 SKILL の自己批判
+
+`verifier/skills/06-marketplace-cache/SKILL.md` の比較ロジック：
+
+```bash
+[ "$CLAUDE_PLUGIN_ROOT" = "$cache_dir" ]
+```
+
+これは Bash tool subprocess 内で実行されるため `$CLAUDE_PLUGIN_ROOT` は **常に unset = 空文字列**（§1.1）。cache_dir と空文字列の比較で「異なる」となり常に VERDICT=PASS を出すバグ。
+
+ただし**結論は他の証拠（probe 02 の SUBST_ROOT）と整合**しているので、§1.6 自体の verdict は PASS で妥当。SKILL を直接 patch するなら：
+
+```bash
+# 比較するべき正しい値は ${CLAUDE_PLUGIN_ROOT} の **substituted** 形
+ROOT='${CLAUDE_PLUGIN_ROOT}'    # Claude Code が pre-substitute するので実行時には source path
+# ... cache_dir も plugin.json の dirname の親（.claude-plugin の親）に修正
+```
+
+これは次の verification round で適切に修正候補。今回は「結論 PASS、SKILL 設計の改善は deferred」として記録。
+
+### 含意
+
+- **plugin 作者が `CLAUDE_PLUGIN_ROOT` に従って source を参照する設計**は v2.1.146 でも有効（cache copy への参照ではない）
+- ローカル marketplace 開発時の iteration loop は source 編集 → 即反映（cache 更新不要、ただし `/reload-plugins` は必要）
+- **配布される plugin の整合性**：marketplace install の cache を信用するな（runtime とは別物）。ユーザに見える state は source ベース
+
+### 研究 §1.6 改訂提案
+
+```diff
+- docs は「copies marketplace plugins to the user's local plugin cache (`~/.claude/plugins/cache`) rather than using them in-place」と書くが、**ローカル directory marketplace では `CLAUDE_PLUGIN_ROOT` が source パスを指す**。cache はコピーされるが hook 実行には使われない。
++ docs は「copies marketplace plugins to the user's local plugin cache (`~/.claude/plugins/cache`) rather than using them in-place」と書くが、**ローカル directory marketplace では `CLAUDE_PLUGIN_ROOT` が source パスを指す**（v2.1.118-119 / v2.1.146 共通）。
++ cache はコピーされるが hook 実行には使われない。
++ v2.1.146 で確認：`installed_plugins.json` の `installPath` 自体は cache を指す形で記録されるため metadata と runtime path の不整合がある。`claude plugin update` は version 比較のみで content hash を見ないので、開発中の SKILL.md 編集を反映させるには `claude plugin uninstall ... -y && claude plugin install ...` で cache を強制再生成する必要がある（ただし runtime は source 読みなので大半のケースで cache 状態は無視可能）。
+```
+
 ---
 
-(以降、probe 06-21 を回しながら追記)
+(以降、probe 07-21 を回しながら追記)
