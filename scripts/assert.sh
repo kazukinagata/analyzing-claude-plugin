@@ -90,7 +90,11 @@ while IFS= read -r line; do
   case "$line" in
     !*)
       pattern="${line#!}"
-      if printf '%s\n' "$buf" | grep -qF -- "$pattern"; then
+      # NOTE: `<<<` here-string avoids the pipefail+SIGPIPE trap where
+      # `grep -q` exits early on match and printf's SIGPIPE exit (141)
+      # becomes the pipeline status under `set -o pipefail`, making
+      # every successful match look like a MISS.
+      if grep -qF -- "$pattern" <<< "$buf"; then
         unwanted+=("[$current_section] $pattern")
         fail_count=$((fail_count + 1))
       else
@@ -98,7 +102,7 @@ while IFS= read -r line; do
       fi
       ;;
     *)
-      if printf '%s\n' "$buf" | grep -qF -- "$line"; then
+      if grep -qF -- "$line" <<< "$buf"; then
         pass_count=$((pass_count + 1))
       else
         missing+=("[$current_section] $line")
@@ -114,7 +118,8 @@ if [ "$fail_count" -eq 0 ] && [ "$pass_count" -gt 0 ]; then
   verdict="PASS"
 elif [ "$pass_count" -eq 0 ] && [ "$fail_count" -gt 0 ]; then
   # If even alive-check is missing, this is observation failure not finding change.
-  if printf '%s\n' "${LOG_CACHE[probe.log]:-}${LOG_CACHE[hooks.log]:-}" | grep -qF "tag=alive-check"; then
+  combined="${LOG_CACHE[probe.log]:-}${LOG_CACHE[hooks.log]:-}"
+  if grep -qF "tag=alive-check" <<< "$combined"; then
     verdict="FAIL"
   else
     verdict="UNKNOWN"
@@ -133,9 +138,9 @@ esac
 case "$probe" in
   06*)
     buf="${LOG_CACHE[probe.log]:-}"
-    if printf '%s\n' "$buf" | grep -qF "VERDICT=DOC-ALIGNED"; then
+    if grep -qF "VERDICT=DOC-ALIGNED" <<< "$buf"; then
       verdict="DOC-ALIGNED"
-    elif printf '%s\n' "$buf" | grep -qF "VERDICT=PASS" && [ "$verdict" != "UNKNOWN" ]; then
+    elif grep -qF "VERDICT=PASS" <<< "$buf" && [ "$verdict" != "UNKNOWN" ]; then
       verdict="PASS"
     fi
     ;;

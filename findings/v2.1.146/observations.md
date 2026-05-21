@@ -554,6 +554,73 @@ Step B で Claude が補足した発言：
 + - block 設計は §1.8 + §1.9 の組み合わせで考える必要がある
 ```
 
+## probe 09-slash-vs-natural （§1.9 / §6.2）
+
+`./scripts/assert.sh 09` → **PASS (4/4 matched)**（assert.sh の pipefail バグ修正後）
+
+### subclaim 単位の判定（v2.1.146 確定版）
+
+実測：2 セッション分の hooks.log を timestamp window で分離（15:51:xx = slash session, 15:52:xx = natural session）：
+
+| event tag | Slash session | Natural session | research §1.9 主張 |
+|---|---|---|---|
+| `tag=user-prompt-submit` | ✅ 発火 | ✅ 発火 | 両方で発火 |
+| `tag=user-prompt-expansion` | ✅ 発火 | **❌ 不発** | slash でのみ発火 |
+| `tag=pretool-skill` | **❌ 不発** | ✅ 発火 | 自然文でのみ発火 |
+| `tag=pretool-bash` | ✅ 発火（skill body Bash） | ✅ 発火（skill body Bash） | 両方で発火 |
+
+研究 §1.9 と完全一致：**slash 経路は Skill tool を通らない、自然文経路は Skill tool 経由**。slash 起動は `UserPromptExpansion` event を発火させ template 展開する path だが Skill tool は呼ばない。自然文は逆。
+
+### 含意
+
+- **OTEL 等で skill 起動を漏れなく観測したい場合は両経路を UNION で監視必須**：自然文経由 (`Skill` tool) + slash 経由 (`UserPromptExpansion`)
+- **plugin 作者のガードレール設計**：08b で見たように、Skill tool の PreToolUse hook で block するパターンは自然文経由しか効かない。slash 起動を止めたければ別の手段（UserPromptSubmit hook で prompt 文字列を見る等）が必要
+- skill 起動時の context cost は同じだが、内部経路が違うので hook 発火パターンも違う
+
+### assert.sh の重大なバグ発見 + 修正
+
+probe 09 を回した時、`grep -F` が hooks.log の中の `tag=user-prompt-submit` 等を「見つからない」と返してきた。実際には 24 件もマッチしているのに。原因：
+
+**`set -o pipefail` + `printf "%s\n" "$buf" | grep -qF -- "pattern"` の組み合わせバグ**
+
+- 大きい `$buf`（165KB）を printf で pipe に書く
+- パイプバッファは Linux で typically 64KB
+- 64KB 以降は printf が grep の consume を待つ
+- 一方 grep -q は最初のマッチで早期終了 → printf に SIGPIPE
+- printf が SIGPIPE で exit 141
+- `set -o pipefail` により pipeline の終了コードが 141 になる
+- `&& MATCH || MISS` の判定が MISS 扱いに
+
+`scripts/assert.sh` の grep 経路 4 箇所を **here-string (`<<< "$buf"`)** に変更して fix。pipe を使わないので SIGPIPE が起きない。
+
+この bug は **hooks.log が pipe buffer サイズを超えた時にだけ顕在化**するので、初期の probe 00-08（hooks.log が小さかった頃）では PASS と判定されていた。probe 09 のタイミングで hooks.log が 165KB に育って初めて顕在化。
+
+→ commit `scripts/assert.sh` のところで詳述。
+
+### 根拠 log
+
+```
+=== [2026-05-21T15:51:02+09:00] tag=user-prompt-expansion ===  ← Slash session
+=== [2026-05-21T15:51:02+09:00] tag=user-prompt-submit ===
+=== [2026-05-21T15:51:10+09:00] tag=pretool-bash ===
+（slash session には tag=pretool-skill 無し）
+
+=== [2026-05-21T15:51:59+09:00] tag=session-start ===            ← Natural session start
+=== [2026-05-21T15:52:06+09:00] tag=user-prompt-submit ===       ← Natural session prompt
+=== [2026-05-21T15:52:10+09:00] tag=pretool-skill ===            ← Skill tool 経由
+=== [2026-05-21T15:52:15+09:00] tag=pretool-bash ===             ← Skill body Bash
+（natural session には tag=user-prompt-expansion 無し）
+```
+
+### 研究 §1.9 改訂提案
+
+```diff
++ v2.1.146 で確認（probe 09）：研究 §1.9 表の通り。`UserPromptExpansion` は CLI で slash のみ、`Skill` tool は自然文のみ。
++ slash 経由で skill を呼んだ時の event chain: UserPromptExpansion → UserPromptSubmit → PreToolUse:Bash（skill body の Bash 呼び出し時）
++ 自然文経由で skill を呼んだ時の event chain: UserPromptSubmit → PreToolUse:Skill → PreToolUse:Bash
++ Skill 起動の OTEL 監視は両 path を UNION で取る必要あり（研究 §9.1 の SQL クエリと整合）
+```
+
 ---
 
-(以降、probe 09-21 を回しながら追記)
+(以降、probe 10-21 を回しながら追記)
