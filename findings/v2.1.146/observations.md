@@ -503,6 +503,57 @@ Step B で Claude が補足した発言：
 + v2.1.146 で確認：Claude (LLM) も「skill body reached me with substitution already applied」と認識しており、context load 直前の substitution というメカニズムが維持されている。
 ```
 
+## probe 08 + 08b — frontmatter hook timing （§1.8）
+
+`./scripts/assert.sh 08` → **PASS (3/3)**
+`./scripts/assert.sh 08b` → **PASS (3/3)**
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| skill frontmatter `SessionStart + once:true` は**発火しない** | ✅ 不発 | ✅ `[08-FM-SESSIONSTART unexpected fire]` が probe.log に**現れない** | PASS |
+| skill frontmatter `PreToolUse:Bash` は **invoke 後** の Bash で発火 | ✅ | ✅ `[08-FM-PreToolUse fired]` が probe.log に invoke 後の各 Bash 呼び出しで記録 | PASS |
+| 自スキルの最初の load を frontmatter hook で block するのは**不可** | ✅ 不可（hook は load 後に登録） | ✅ 08b の 1 回目 invoke は成功 → `[08b-BODY] tag=alive-check (this proves 08b loaded — frontmatter cannot block itself)` | PASS |
+| 自スキルの **2 回目以降** invoke は frontmatter `PreToolUse:Skill` で block 可能 | ✅（推定、明示観察なし） | ✅ 08b 2 回目（自然文）は `Error: blocked by 08b-self-block-attempt (testing whether self-blocking works)` で block | PASS |
+
+### 重要：08b の self-block は §1.8 と §1.9 の組み合わせで成立
+
+08b の 2 回目 invoke を **自然文で**呼んだから block された：
+
+- 自然文呼び出し → Claude が `Skill` tool を呼ぶ → PreToolUse:Skill hook 発火 → 08b の登録済 frontmatter hook が JSON `{"decision":"block","reason":"..."}` を返す → block 成立
+- **slash で 2 回目を呼んでいたら**：研究 §1.9 により Skill tool 不発 → PreToolUse:Skill 不発 → block されない（=skill body が走る = 1 回目と同じ）
+
+これは §1.8 と §1.9 が連動する設計上の重要な特性。**block ガードを掛けたい plugin 作者は「自然文経由でしか block されない」ことを念頭に置く必要がある**。
+
+### 確認した log
+
+```
+[08-FM-PreToolUse fired] 2026-05-21T15:32:08+09:00
+[08-BODY 2026-05-21T15:32:18+09:00] tag=alive-check
+[08-FM-PreToolUse fired] 2026-05-21T15:32:22+09:00
+[08b-BODY 2026-05-21T15:37:52+09:00] tag=alive-check (this proves 08b loaded — frontmatter cannot block itself)
+[08b-FM 2026-05-21T15:38:15+09:00] tag=block-emitted reason="blocked by 08b-self-block-attempt"
+```
+
+タイムスタンプの差（08-FM が 08-BODY より 10 秒早い）は、PreToolUse:Bash の同期実行（hook 完了 → tool 実行）の order を表しているだけで、研究 §1.10 の並列実行とは別問題（§1.10 は同一 array 内の hook 同士の並列）。
+
+### 含意
+
+- **block ガード設計**：plugin 作者が「特定 skill の起動を止めたい」場合、その skill の frontmatter に PreToolUse:Skill hook を置く方法は使える（ただし最初の起動は止まらない）。
+- **slash invoke は guard 経路をバイパス**する：plugin 作者の意図に反する skill 起動を slash で行えば、block hook を avoid できる。「skill 経由の sandboxing」は完全ではない
+- **自スキル自体の保護**：08b パターンは「初回 load は許す、再 load は止める」という設計。**初回 load の副作用が問題ない**前提なら使える（例：state initialization は 1 回だけ走らせる用途）
+
+### 研究 §1.8 / §2.4 改訂提案
+
+```diff
++ v2.1.146 で確認（probe 08 + 08b）：
++ - `SessionStart + once:true` を skill frontmatter に書いても発火しない（skill load 前なので hook 未登録）
++ - skill 自体の最初の load は frontmatter hook で block 不可
++ - 2 回目以降の skill invoke は frontmatter `PreToolUse:Skill` hook で block 可能（**自然文経由限定** — §1.9 の slash 経路は Skill tool 不発のため block hook も不発）
++ - block 設計は §1.8 + §1.9 の組み合わせで考える必要がある
+```
+
 ---
 
-(以降、probe 08-21 を回しながら追記)
+(以降、probe 09-21 を回しながら追記)
