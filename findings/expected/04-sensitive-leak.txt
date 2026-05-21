@@ -1,9 +1,12 @@
-# §1.4 sensitive value exposed in plain text via env
+# §1.4 — sensitive value exposed in plain text via plugin-level env.
+# Body Bash subprocess does NOT see the OPTION_* env (per §1.1),
+# so probe.log [04-BODY] lines show (unset). The actual leak is in
+# hooks.log (plugin-level hook env dump).
 
 @probe.log
 tag=alive-check
-[04-BODY] CLAUDE_PLUGIN_OPTION_API_SECRET=[secret-xyz-CANARY]
-[04-BODY] CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[hello-from-cli-CANARY]
+[04-BODY] CLAUDE_PLUGIN_OPTION_API_SECRET=[(unset)]
+[04-BODY] CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[(unset)]
 
 @hooks.log
 CLAUDE_PLUGIN_OPTION_API_SECRET=[secret-xyz-CANARY]

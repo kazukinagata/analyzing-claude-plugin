@@ -212,6 +212,101 @@ probe 03 を修正する過程で判明：
 + exit 非ゼロが Bash tool 全体を block するため、意図的失敗コマンドは exit 0 を強制する idiom が必要。
 ```
 
+## probe 04-sensitive-leak （§1.4）
+
+`./scripts/assert.sh 04` → **PASS (5/5 matched)**
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| 非機密値が `CLAUDE_PLUGIN_OPTION_<KEY>` env に届く（plugin-level hook） | ✅ | ✅ `CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE=[hello-from-cli-CANARY]` | PASS |
+| **sensitive: true 値も平文で env 露出**（plugin-level hook） | ✅（仕様、コメントで明示） | ✅ `CLAUDE_PLUGIN_OPTION_API_SECRET=[secret-xyz-CANARY]` | PASS |
+| OPTION_* env は Bash tool subprocess に届かない（§1.1 関連） | ✅ | ✅ `[04-BODY] CLAUDE_PLUGIN_OPTION_API_SECRET=[(unset)]` | PASS |
+| sensitive 値の保存場所が非機密と分離されている | ✅ keychain or `.credentials.json` フォールバック（§4.1 / §4.2 に明記） | ✅ WSL Ubuntu では `.credentials.json` フォールバック側に格納（`pluginSecrets.<id>.<key>`） | PASS — WSL は keychain 非対応のためフォールバック路を観察したのみ、仕様変更ではない |
+| 非機密値は `pluginConfigs.<id>.options.<key>` 平文 | ✅ settings.json | ✅ `settings.json.pluginConfigs.verifier@verifier-mp.options.hello_message=hello-from-cli-CANARY` | PASS |
+
+### v2.1.146 で判明した pluginConfigs スキーマ詳細
+
+実測で確定した正しい入れ子（research には言及無し or 不正確）：
+
+```json
+{
+  "pluginConfigs": {
+    "<plugin>@<marketplace>": {
+      "options": {
+        "<key>": "<value>"
+      }
+    }
+  }
+}
+```
+
+**注意：`options` という入れ子が必須**。`pluginConfigs.<id>.<key>` 直下に書いてもランタイムは拾わない（私が当初試した形式で `(unset)` のままだった）。
+
+sensitive 値の格納場所：
+
+```json
+// .credentials.json
+{
+  "claudeAiOauth": {...},
+  "mcpOAuth": {...},
+  "pluginSecrets": {
+    "<plugin>@<marketplace>": {
+      "<sensitive_key>": "<value-plain-text>"
+    }
+  }
+}
+```
+
+### `/plugins` UI 経由の設定が正規ルート
+
+probe 04 の試行錯誤で判明したフロー：
+
+1. 直接 `settings.json` を編集して `pluginConfigs.<id>.<key>` 形式で書いても拾われない
+2. **`/plugins` UI を起動**して該当 plugin の Configure options から値を入力すると、正しい schema（`options.<key>` 入れ子）で書き込まれる
+3. sensitive: true マーク付きの値は `.credentials.json` の `pluginSecrets` に行く
+4. ランタイムでは両方とも `CLAUDE_PLUGIN_OPTION_<KEY>` env として plugin-level hook に届く（保存先による差は無い）
+
+### 含意
+
+- **CI で plugin 配布前にユーザに値入力させたい場合、`/plugins` UI 起動を runbook に明記**する必要がある（settings.json の direct edit は schema を間違えると silently 動かない）
+- **`sensitive: true` の実保護レベルは「平文 file への保存先分離」のみ**。keychain（OS の secure storage）ではなく `.credentials.json` 内の別セクションに行く。ファイルに `0600` の permission は付くが、OS secret service ではない
+- **plugin 作者が「実際に effective な userConfig 値」を確認するには hooks.log の env dump が必要** — settings.json だけ見ても sensitive 値は見えない
+
+### 副次的な観察：CLAUDE_CONFIG_DIR symlink の副作用
+
+本リポジトリは `findings/claude-home/.credentials.json` を `~/.claude/.credentials.json` への symlink にしている（auth 共有のため）。**`/plugins` UI で書き込んだ `pluginSecrets` は symlink 越しにホストの `~/.claude/.credentials.json` に書かれた**。検証目的の CANARY 値なので問題ないが、本物の API key を試すなら symlink を一旦切るべき。
+
+### 根拠 log
+
+- `findings/v2.1.146/no-sid/hooks.log` — `tag=user-prompt-submit` 以降の env section
+- `findings/claude-home/settings.json` — pluginConfigs section
+- `findings/claude-home/.credentials.json`（symlink）→ ホスト `~/.claude/.credentials.json` の pluginSecrets セクション
+
+### 研究 §1.4 / §4.2 への補足提案
+
+研究 §4.1 と §4.2 でプラットフォーム別の格納先は既に書かれている（「OS キーチェーン or `~/.claude/.credentials.json`（WSL など OS キーチェーン非対応環境）」）。v2.1.146 / WSL Ubuntu の実測はそのフォールバック路の具体構造を確定したのみ：
+
+```diff
++ WSL Ubuntu / v2.1.146 実測：機密値は `.credentials.json` の以下の構造に格納される
++   {
++     "pluginSecrets": {
++       "<plugin>@<marketplace>": {
++         "<sensitive_key>": "<value-plain-text>"
++       }
++     }
++   }
+```
+
+```diff
+- `/plugins` UI / Configure options から値を入力 → settings.json に書き込まれる
++ `/plugins` UI / Configure options から値を入力 →
++ 非機密：settings.json の `pluginConfigs.<id>.options.<key>` 入れ子に書き込まれる
++ 機密：keychain（OS 対応時）or `.credentials.json.pluginSecrets.<id>.<key>`（WSL 等のフォールバック）に書き込まれる
++ settings.json を direct edit する場合は `.options` 入れ子を忘れると runtime が拾わない
+```
+
 ---
 
-(以降、probe 04-21 を回しながら追記)
+(以降、probe 05-21 を回しながら追記)
