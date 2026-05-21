@@ -42,24 +42,51 @@
 
 詳細 log: `findings/v2.1.146/no-sid/{hooks.log, probe.log}` (CLAUDE_SESSION_ID env が unset なので sid=no-sid)。
 
-## probe 01-env-propagation の暫定観察（00-canary log から先取り）
+## probe 01-env-propagation （§1.1 / §3.1）
 
-probe 01 を本格走らせる前に、canary log から判明した env 伝播（plugin-level hook）：
+`./scripts/assert.sh 01` → **PASS (12/12 matched)**
 
-| env | research §1.1 主張 | v2.1.146 実測 | 判定 |
-|---|---|---|---|
-| `CLAUDE_PLUGIN_ROOT` | ✅ set | ✅ set（`/home/.../verifier`） | PASS |
-| `CLAUDE_PLUGIN_DATA` | ✅ set | ✅ set（`findings/claude-home/plugins/data/verifier-inline`） | PASS |
-| `CLAUDE_PROJECT_DIR` | ✅ set | ✅ set | PASS |
-| `CLAUDE_CODE_REMOTE` | 空 | (unset) | PASS（"unset" と "空" は同義に扱う） |
-| **`CLAUDE_SESSION_ID`** | ✅ set（未確認だった） | **❌ unset**（env としては取れない）。stdin の JSON payload に `session_id` フィールドがあり、本物の UUID はそこに入っている | **FAIL / 仕様改訂** |
-| **`CLAUDE_CODE_EXECPATH`** | ✅ set | **❌ unset** | **FAIL / 退行 or 仕様改訂** |
-| `CLAUDE_CODE_ENTRYPOINT=cli` | ✅ set | ✅ set | PASS |
-| `CLAUDE_PLUGIN_OPTION_*` | ✅ userConfig 設定時 | （未設定で確認） | PENDING (probe 04 で確定) |
+### env 伝播 3 階層の実測表（v2.1.146 確定版）
 
-**含意**：plugin 作者が session 識別を欲しい場合、`$CLAUDE_SESSION_ID` env ではなく hook の **stdin JSON** から `session_id` を parse する必要がある。研究 §1.1 の表で `CLAUDE_SESSION_ID` を「(未確認)」にしていた行は v2.1.146 で「env として export されない」に確定。
+| env | plugin-level hook | skill frontmatter hook | Bash tool subprocess | research §1.1 一致 |
+|---|---|---|---|---|
+| `CLAUDE_PLUGIN_ROOT` | ✅ 実値 | ✅ 実値 | ❌ unset | **PASS** |
+| `CLAUDE_PLUGIN_DATA` | ✅ 実値 | ❌ (empty) | ❌ unset | **PASS** |
+| `CLAUDE_PROJECT_DIR` | ✅ 実値 | ✅ 実値 | ❌ unset | **PARTIAL** — research §1.1 行 158 で「frontmatter は要追試」→ v2.1.146 で ✅ 確定 |
+| `CLAUDE_PLUGIN_OPTION_*` | (userConfig 未設定で確認) | ❌ (empty) | ❌ unset | PASS（probe 04 で再確認） |
+| `CLAUDE_SESSION_ID` | **❌ unset** | ❌ unset | ❌ unset | **FAIL** — research では plugin-level ✅ だったが v2.1.146 で退行。session_id は **hook の stdin JSON payload** にのみ存在 |
+| `CLAUDE_SKILL_DIR` | ❌ unset | ❌ unset | ❌ unset | PASS（研究 §3.1 とおり env 経路では出ない） |
+| `CLAUDE_CODE_ENTRYPOINT=cli` | ✅ | (推定 ✅) | ✅ | PASS |
+| `CLAUDE_CODE_EXECPATH` | **❌ unset** | (未確認) | **✅ `/home/.../2.1.146`** | **FAIL / 非対称** — research では全層 ✅ だったが v2.1.146 では **plugin-level hook では unset、Bash subprocess では set** という逆転。CLAUDE_CODE_* の伝播は「メタ runtime 情報」として一括 ✅ という単純化が崩れた |
+| **`CLAUDE_CODE_SESSION_ID`** | (未確認) | (未確認) | **✅ 実 UUID** | **NEW** — research に存在しなかった env。skill body から session id が取りたければ `CLAUDE_SESSION_ID` ではなく `CLAUDE_CODE_SESSION_ID` を使う |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | — | — | ✅ `1` | NEW（テレメトリ on/off メタ） |
+| `CLAUDE_EFFORT=xhigh` | — | — | ✅ | NEW（effort level 表示） |
+| `CLAUDE_CONFIG_DIR` | (実装由来) | (実装由来) | ✅ user export 由来で届く | （元から user-controlled） |
 
-なお log.sh は CLAUDE_SESSION_ID env が unset の場合 `sid=no-sid` にフォールバックする実装になっており、現バージョンでは全 log が `no-sid/` 配下に集約される。**probe 09**（slash vs natural の 2 セッション分離）は CLAUDE_SESSION_ID env に依存していたので、stdin payload から sid を抽出するか、`fork-session` 等の別経路で対処が必要 — 後で plan 改訂候補。
+### 含意
+
+1. **plugin 作者が skill body から session 識別を欲しい場合は `$CLAUDE_CODE_SESSION_ID`** を使う。`$CLAUDE_SESSION_ID` env は v2.1.146 では全層 unset
+2. **plugin-level hook で session_id を得るには `stdin` JSON payload の `session_id` フィールドを parse**（log.sh の stdin 取得ロジックが正しく動いている）
+3. **CLAUDE_CODE_EXECPATH の plugin-level hook での unset** は研究と非対称な退行。これに依存する hook 設計（実行 claude バイナリ path を hook 内で取りたい等）は v2.1.146 では機能しない
+4. **probe 09**（slash vs natural の 2 セッション分離）は research の `CLAUDE_SESSION_ID` env 前提で書いてあるが、v2.1.146 では `CLAUDE_CODE_SESSION_ID` または stdin JSON 経由で分離する必要あり — plan 改訂候補
+
+### 根拠 log
+
+- `findings/v2.1.146/no-sid/hooks.log` — `tag=session-start` および `tag=pretool-bash` セクション
+- `findings/v2.1.146/no-sid/probe.log` — `[01-FM]` `[01-BODY]` 行
+- 全 12 件の expected pattern が matched（`findings/expected/01-env-propagation.txt`）
+
+### 研究 §1.1 改訂提案
+
+```diff
+- | `CLAUDE_PROJECT_DIR` | ✅ 設定（実測） | 本実験の probe では直接観測していない（要追試） | ❌ 未設定（実測） |
++ | `CLAUDE_PROJECT_DIR` | ✅ 設定（実測） | ✅ 設定（v2.1.146 実測） | ❌ 未設定（実測） |
+- | `CLAUDE_CODE_ENTRYPOINT` / `CLAUDE_CODE_EXECPATH` 等 `CLAUDE_CODE_*` 系 | ✅ 設定 | ✅ 設定（推定） | ✅ **設定**（実測） |
++ | `CLAUDE_CODE_ENTRYPOINT` | ✅ 設定 | ✅ 設定（推定） | ✅ 設定 |
++ | `CLAUDE_CODE_EXECPATH` | ❌ unset（v2.1.146 で plugin-level から消失） | 未確認 | ✅ 設定（Bash subprocess には届く） |
++ | `CLAUDE_CODE_SESSION_ID`（新） | 未確認 | 未確認 | ✅ 実 UUID（v2.1.146 で確認） |
++ | `CLAUDE_SESSION_ID` | ❌ unset（v2.1.146 ; stdin JSON payload に格納） | ❌ unset | ❌ unset |
+```
 
 ## 既知の v2.1.146 固有挙動（Claude Code バグ class）
 
