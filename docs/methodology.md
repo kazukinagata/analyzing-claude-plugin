@@ -67,6 +67,17 @@ findings/v2.1.143/
 | CANARY-FAILED | probe 00 が PASS せず、後続全 probe の verdict は信用できない |
 | MANUAL-OK / MANUAL-NG | 自動判定不可、人間目視で判定 |
 
+## 6.1 観測ノートの書き場所
+
+`findings/v<VERSION>/observations.md` に probe ごとの研究差分を**逐次追記**する。`assert.sh` の機械的 verdict（PASS/FAIL/…）だけでは捕捉できない以下の情報を残す：
+
+- research §X.Y のどの subclaim が成立／失効したか
+- 新たに分かった挙動（research に書かれていなかった env や flag）
+- v2.1.146 固有のバグ class（例：skill body の `$1` pre-substitution）
+- plan / SKILL 設計に対する改訂提案
+
+`findings/v*/observations.md` と `findings/v*/report.md` は `.gitignore` の exception 対象なので、log は ignore したまま観測 note と verdict 集計だけが git に残る。
+
 ## 7. 観測前 invariant 確認（canary）
 
 すべての probe は alive-check tag を log に出してから本検証を行う。これにより：

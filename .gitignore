@@ -1,6 +1,9 @@
 findings/claude-home/
 findings/cli-help/
-findings/v*/
+# Ignore everything inside per-version dirs except curated observations/report.
+findings/v*/*
+!findings/v*/observations.md
+!findings/v*/report.md
 findings/parser-tests.log
 findings/*.log
 findings/*.lock
