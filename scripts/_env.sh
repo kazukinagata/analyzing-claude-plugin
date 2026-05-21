@@ -37,3 +37,10 @@ if [ -n "${BASH_VERSION:-}" ]; then
   export -f verifier_version_dir 2>/dev/null || true
 fi
 export VERIFIER_REPO_ROOT="$__VERIFIER_REPO_ROOT"
+
+# Share Claude account credentials with the isolated CLAUDE_CONFIG_DIR so
+# `claude --plugin-dir ./verifier` doesn't re-prompt for login. Plugin and
+# settings.json stay isolated; only the auth blob is shared via symlink.
+if [ -f "$HOME/.claude/.credentials.json" ] && [ ! -e "$CLAUDE_CONFIG_DIR/.credentials.json" ]; then
+  ln -sfn "$HOME/.claude/.credentials.json" "$CLAUDE_CONFIG_DIR/.credentials.json"
+fi
