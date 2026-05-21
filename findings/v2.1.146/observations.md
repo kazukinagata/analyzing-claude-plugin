@@ -776,6 +776,96 @@ Error: blocked by 12-block-self frontmatter hook (target was 11-block-target)
 （tag=pretool-mcp-workspace-bash は全 hooks.log 通じて 0 件）
 ```
 
+## probe 14-cowork-parser（CLI baseline 部分）（§2.6 / §7.10 / §7.11）
+
+`./scripts/assert.sh 14` → **PASS (6/6 matched)** （CLI baseline）
+
+### CLI baseline subclaim 判定
+
+CLI では hook command が `/bin/sh` で実行され、`bash -c "..."` を含むパーサーテストは（外側 /bin/sh が解釈してから内側 bash -c に渡す形で）全て成立：
+
+| parser test | hook command | CLI 観察 | 判定 |
+|---|---|---|---|
+| T0 BARE | `echo PARSER_TEST_BARE >> ...` | ✅ `PARSER_TEST_BARE` | PASS |
+| T1 DQ | `bash -c "echo PARSER_TEST_DQ"` | ✅ `PARSER_TEST_DQ` | PASS |
+| T2 SEMI | `bash -c "echo PARSER_TEST_SEMI; echo PARSER_TEST_SEMI_X"` | ✅ `PARSER_TEST_SEMI` + `PARSER_TEST_SEMI_X` | PASS |
+| T3 PIPE | `bash -c "echo PARSER_TEST_PIPE \| cat"` | ✅ `PARSER_TEST_PIPE` | PASS |
+| T4 VAR | `bash -c "x=foo; echo PARSER_TEST_VAR_$x"` | ⚠ `PARSER_TEST_VAR_`（`foo` が抜けた） | PARTIAL — 下記 bonus 参照 |
+| T5 AND | `bash -c "true && echo PARSER_TEST_AND"` | ✅ `PARSER_TEST_AND` | PASS |
+| T6 OR | `bash -c "false \|\| echo PARSER_TEST_OR"` | ✅ `PARSER_TEST_OR` | PASS |
+
+→ T0-T6 のうち 6 つはマーカー出現で PASS（assert.sh は T0/DQ/PIPE/AND/OR の 5 マーカー + alive-check で 6 matched）。
+
+### bonus 観察 — 二重 shell の `$x` 展開タイミング
+
+T4（VAR）の結果が `PARSER_TEST_VAR_foo` ではなく `PARSER_TEST_VAR_`（末尾 foo が抜け）だった。原因：
+
+hook command の JSON は：
+```json
+"command": "bash -c \"x=foo; echo PARSER_TEST_VAR_$x\" >> \"...\""
+```
+
+JSON エスケープ解除後、`/bin/sh` が受け取る文字列：
+```sh
+bash -c "x=foo; echo PARSER_TEST_VAR_$x" >> "..."
+```
+
+ここで `"$x"` は外側 `/bin/sh` が**先に展開**する（double-quoted 内の変数展開）。外側 sh は `x` を知らない → `$x` = 空文字列。bash -c が受け取る引数は：
+```sh
+x=foo; echo PARSER_TEST_VAR_
+```
+
+bash -c 内で `x=foo` が assign されるが、`echo` の引数は既に空文字置換済み。結果 `PARSER_TEST_VAR_` のみ。
+
+`PARSER_TEST_VAR_foo` を出したければ `$x` をエスケープ：
+
+```json
+"command": "bash -c \"x=foo; echo PARSER_TEST_VAR_\\$x\""
+```
+
+これで `/bin/sh` 層では `\$x` → literal `$x`、bash -c 内で `$x` が `foo` に展開。
+
+研究の `bash -c "x=foo; echo ..."` testcase はこのエスケープ問題に触れていなかったが、**CLI / Cowork どちらでも同じ罠**にハマる可能性がある。
+
+### Cowork で観察すべき項目（deferred）
+
+- T1-T6 のうち **Cowork で消えるのは AND / OR / PIPE / cat 等**（research §2.6 によると outer parser が && || | を分断する）。CLI baseline では全て出ているので、Cowork で出ない＝Cowork parser whitelist 制約の証拠
+- echo の bare 形 (T0) と bash -c double-quote 形 (T1) は両方とも Cowork 通過すると想定
+
+### 含意
+
+- **CLI は普通の /bin/sh 解釈**で複合シェル構文が動く。プラグイン作者が CLI 向けの hook を書く場合、bash -c で囲んだ複雑な command は OK
+- **Cowork に出すと壊れる構文があり得る**。配布前に hooks-parser-tests.json variant + CLI/Cowork 比較で確認するワークフローが必要
+- **二重 shell の `$x` 罠**（bonus）は CLI でも Cowork でも起き得る → bash -c の中の変数は `\$` でエスケープして bash -c 内で展開させるべき
+
+### 根拠 log
+
+```
+findings/parser-tests.log:
+PARSER_TEST_DQ
+PARSER_TEST_VAR_         ← VAR_foo にならない（bonus 観察、二重 shell quoting 罠）
+PARSER_TEST_BARE
+PARSER_TEST_AND
+PARSER_TEST_PIPE
+PARSER_TEST_OR
+PARSER_TEST_SEMI
+PARSER_TEST_SEMI_X
+```
+
+### 後処理
+
+`verifier/hooks/hooks.json` は default 内容に restore 済（probe 14 検証完了後）。
+
+### 研究 §2.6 / §7.10 / §7.11 改訂提案
+
+```diff
++ v2.1.146 CLI baseline （probe 14）：T0-T6 の bash -c 系 parser test 全てマーカー出現。CLI /bin/sh は research の想定通り全 bash 構文を解釈。
++ Cowork での parser whitelist 制約は research §2.6 表通り想定（AND / OR / PIPE / cat 等が outer parser で分断）→ Cowork 検証 round で具体確認。
++
++ bonus（research に明示なし）：bash -c 内の変数は `$x` ではなく `\$x` でエスケープしないと外側 /bin/sh が先に展開してしまう。
++ JSON エスケープ込みで `\\$x` と書く必要あり。CLI / Cowork どちらでも同じ罠。
+```
+
 ---
 
-(以降、probe 14-21 — Cowork 検証はまとめて後回し、CLI で取れる baseline 部分のみ進める)
+(以降、probe 15, 20 — CLI baseline、その他は Cowork パスで)
