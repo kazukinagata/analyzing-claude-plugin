@@ -738,6 +738,44 @@ Error: blocked by 12-block-self frontmatter hook (target was 11-block-target)
 + 上記は CLI 環境の挙動。Cowork での同等観察は probe 13-21 で取得予定。
 ```
 
+## probe 13-cowork-pretooluse（CLI baseline 部分）（§2.5 / §2.4）
+
+`./scripts/assert.sh 13` → **PASS (3/3 matched)**（CLI baseline 部分のみ）
+
+### CLI baseline subclaim 判定
+
+| § subclaim | CLI 期待 | v2.1.146 CLI 実測 | 判定 |
+|---|---|---|---|
+| plugin-level `PreToolUse:Bash` hook が CLI で発火（default では pass-through） | ✅ 発火、block 仕掛けないので透過 | ✅ `tag=pretool-bash` 出現、`TEST_BASH_OK_MARKER` 平文出力 | PASS（CLI baseline 確定） |
+| CLI で `matcher: "mcp__workspace__bash"` の hook は不発（Cowork 限定 tool 名） | ✅ 不発 | ✅ `tag=pretool-mcp-workspace-bash` 出現せず | PASS |
+| `CLAUDE_CODE_ENTRYPOINT=cli` を skill body で確認可能 | ✅ | ✅ `[13-BODY] CLAUDE_CODE_ENTRYPOINT=[cli]` | PASS |
+
+### Cowork 部分（deferred）
+
+以下は Cowork (Claude Desktop) 環境必須なので保留：
+
+- plugin-level `PreToolUse:Bash`（matcher Bash / Skill / `.*` / mcp__workspace__bash）の block 試行が全て無視される（§2.5）
+- bash tool 名が `mcp__workspace__bash` になる（§2.4）→ CLI で確認した「matcher Bash / Skill / `.*` 不発」が Cowork 側でも継続する想定
+- hooks-block.json variant を有効化してから Cowork zip を作成・upload → block 不発確認
+
+### 含意（CLI baseline 視点）
+
+- CLI で plugin-level PreToolUse:Bash がきちんと発火するのは確認できた（research §2.5 の CLI ✅ と整合）
+- Cowork 側の「block 死亡」は CLI baseline と対比することで初めて意味が出る observation。Cowork 検証フェーズで再度参照
+
+### 根拠 log
+
+```
+[13-BODY 2026-05-21T16:17:03+09:00] tag=alive-check
+[13-BODY] TEST_BASH_OK_MARKER (CLI without block hook: appears; ...)
+[13-BODY] CLAUDE_CODE_ENTRYPOINT=[cli]
+
+=== [2026-05-21T16:17:00+09:00] tag=pretool-bash ===
+=== [2026-05-21T16:17:08+09:00] tag=pretool-bash ===
+=== [2026-05-21T16:17:13+09:00] tag=pretool-bash ===
+（tag=pretool-mcp-workspace-bash は全 hooks.log 通じて 0 件）
+```
+
 ---
 
-(以降、probe 13-21 を回しながら追記)
+(以降、probe 14-21 — Cowork 検証はまとめて後回し、CLI で取れる baseline 部分のみ進める)
