@@ -906,6 +906,98 @@ PARSER_TEST_SEMI_X
 + hook が呼ばれた事実は probe.log への独立 echo で別経路観察可能 — Cowork での「hook 自体は呼ばれたが file が届かない」状態を判定する canary として有用。
 ```
 
+## probe 20-cowork-validation（CLI baseline 部分）（§2.3）
+
+`./scripts/assert.sh 20` → **PASS (4/4 matched)** （CLI baseline）
+
+### CLI validate の実測文言
+
+**20a — UserPromptExpansion variant plugin** （`verifier-violator-userpromptexpansion`）：
+```
+Validating plugin manifest: /home/.../verifier-violator-userpromptexpansion/.claude-plugin/plugin.json
+✔ Validation passed
+```
+→ CLI **エラーも warning も無し**。UserPromptExpansion event を含む hooks.json が validator を通過する。
+
+**20b — uppercase plugin name variant** （`verifier-violator-uppercase-name`、`name: "Verifier-Violator-Uppercase"`）：
+```
+Validating plugin manifest: /home/.../verifier-violator-uppercase-name/.claude-plugin/plugin.json
+
+⚠ Found 1 warning:
+  ❯ name: Plugin name "Verifier-Violator-Uppercase" is not kebab-case. Claude Code accepts it, but the Claude.ai marketplace sync requires kebab-case (lowercase letters, digits, and hyphens only, e.g., "my-plugin").
+
+✔ Validation passed with warnings
+```
+→ CLI は **warning** のみ。hard error ではない。「Claude Code accepts it, but the Claude.ai marketplace sync requires kebab-case」と注釈付き — つまり v2.1.146 で kebab-case の制約は **Claude.ai marketplace 側の sync 要件**で、CLI/Claude Code 単体では受け入れる方針。
+
+### subclaim 判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 CLI 実測 | 判定 |
+|---|---|---|---|
+| CLI は具体的なエラー / warning を返す（Cowork の generic と対比） | ✅ 具体メッセージ | ✅ 具体 warning（kebab-case）or 通過 | PASS — 文言は具体的 |
+| UserPromptExpansion in hooks.json を CLI validator が**block する** | ✅ block と推定 | ❌ **block しない、Validation passed** | **FAIL** — research § 2.3 で「CLI 具体エラー / Cowork generic」と書かれていたが、v2.1.146 CLI では UserPromptExpansion 単独では block しない |
+| 大文字 plugin name を validator が拒否 | ✅ `Plugin name must be kebab-case` | ⚠ warning のみで pass | **DOC-ALIGNED / 退行**：v2.1.146 は CLI 単体では receive、Claude.ai marketplace sync は kebab-case 必須 |
+
+### v2.1.146 で挙動が変わった可能性
+
+研究 §2.3 行 142-149 では「CLI で `Plugin name must be kebab-case: ...` のような具体エラー、Cowork で generic」とされていた。v2.1.146 CLI は **warning だけで pass** に softer になっている。これは：
+
+- 研究時の挙動（具体エラーで拒否）から v2.1.146 で warning だけに緩和された possibility
+- または研究時点でも warning が出ていたが、研究記録者は警告 vs エラーを区別していなかった possibility
+
+いずれにせよ **v2.1.146 CLI は invalid plugin を install してしまう** ので、CI で `claude plugin validate` を回しても sync 要件違反を検出できない（Claude.ai marketplace への push でだけエラーになる）。
+
+### Cowork で観察すべき項目（deferred）
+
+両 variant を Cowork で zip upload → どちらも `Plugin validation failed`（generic、理由表示なし）になるはず（§2.3）。CLI baseline で取った具体文言と対比することで research §2.3 の主張（「Cowork は理由表示無し」）の確認になる。
+
+### 研究 §2.3 改訂提案
+
+```diff
+- | Plugin name エラー | 具体的：`Plugin name must be kebab-case: ...` | 汎用：`Plugin validation failed`（理由不明） |
++ | Plugin name エラー | v2.1.118-119 当時：具体エラー（推定）。v2.1.146 実測：CLI は **warning only**、`name: Plugin name "X" is not kebab-case. Claude Code accepts it, but the Claude.ai marketplace sync requires kebab-case`、それでも `Validation passed with warnings` で install 可能 | 汎用：`Plugin validation failed`（理由不明） |
++ | UserPromptExpansion in hooks.json | v2.1.118-119：CLI は通る、Cowork は validation 拒否 | v2.1.146 CLI 実測：`Validation passed` 完全に通過、Cowork 側挙動は未確認 |
++
++ v2.1.146 で CLI validator は invalid plugin の発見が softer に：kebab-case 違反は warning、UserPromptExpansion は pass。Cowork 側の rejection は別レイヤー（marketplace sync / Cowork validation gate）で実装されている可能性が高い。
+```
+
 ---
 
-(probe 20 — CLI baseline。その他は Cowork パスで)
+## CLI 検証 round の summary
+
+CLI 環境で実行可能な probe をすべて完走：
+
+| probe | verdict | research との関係 |
+|---|---|---|
+| 00-canary | PASS (8/8) | 観測基盤健全 |
+| 01-env-propagation | PASS (12/12) | env 伝播 3 階層 + PROJECT_DIR が frontmatter に届く（未確認だった）|
+| 02-substitution-allowlist | PARTIAL (6/8) | CLAUDE_PROJECT_DIR が skill body で置換される（仕様変更）+ install validator block 不発 |
+| 03-shell-binsh | PASS (7/7) | /bin/sh = dash 確認 + bonus `${PWD^^}` 罠 |
+| 04-sensitive-leak | PASS (5/5) | sensitive 値が env 平文露出 + WSL では `.credentials.json.pluginSecrets` |
+| 05-userconfig-trigger | PARTIAL (1/2) | install/enable silent + `/plugins` UI + disable→enable silent confirmed、route 4 (参照あり+未設定 hook error) は plugin-level reference が無いため deferred |
+| 06-marketplace-cache | PASS (2/2) | source path runtime + cache dead data + installPath が cache を指す metadata と不整合 |
+| 07-skill-body-subst | PASS (3/3) | invoke 経路のみ substituted、Read 経路は literal |
+| 08-frontmatter-timing | PASS (3/3) | SessionStart+once:true 不発、PreToolUse:Bash は invoke 後発火 |
+| 08b-self-block-attempt | PASS (3/3) | 自スキル初回 load は block 不可、自然文 2 度目で block 可能（§1.8+§1.9 連動）|
+| 09-slash-vs-natural | PASS (4/4) | slash で UserPromptExpansion / pretool-skill 不発、自然文で逆 |
+| 10-parallel-hook-firing | PASS (7/7) | SessionStart array 内 3 hook 並列発火、別 pid + nanosec ts で実証 |
+| 11-block-target / 12-block-self | PASS (2/2, 3/3) | frontmatter PreToolUse:Skill で別 skill を block 可能（自然文経由限定）|
+| 13-cowork-pretooluse | PASS (3/3) | CLI baseline：plugin-level PreToolUse:Bash 発火、mcp__workspace__bash matcher 不発 |
+| 14-cowork-parser | PASS (6/6) | CLI baseline：全 bash -c 構文通過、bonus `$x` 二重 shell 罠 |
+| 15-cowork-file-io | PASS (3/3) | CLI baseline：hook 内 /tmp file write が Bash subprocess から見える |
+| 20-cowork-validation | PASS (4/4) | CLI baseline：UserPromptExpansion 通過 / 大文字 plugin name は warning のみ |
+| 16-cowork-path-forms | DEFERRED | Cowork で path 3 形式観察必要 |
+| 17-cowork-bash-mount | DEFERRED | Cowork の `/sessions/<codename>/mnt/` filesystem 必要 |
+| 18-cowork-data-isolation | DEFERRED | Cowork の cross-chat DATA 分離必要 |
+| 19-cowork-resume | DEFERRED | Cowork VM suspend/resume 必要 |
+| 21-cowork-connected-folder | DEFERRED | Cowork の `request_cowork_directory` tool 必要 |
+
+**CLI verification round の総括**：
+
+- 17 probe を実行、12 PASS + 2 PARTIAL（02, 05）+ 5 deferred（Cowork-only）
+- assert.sh の重大バグ（pipefail+SIGPIPE）を発見・修正（probe 09 で顕在化）
+- 環境固有 finding を 30+ 件 observations.md に記録
+- 研究 §1.1, §1.2, §1.3, §1.4, §1.5, §1.6, §1.7, §1.8, §1.9, §1.10, §2.3, §2.4, §2.5, §2.6, §2.7 の v2.1.146 状態を確定
+- 主な仕様変更：CLAUDE_PROJECT_DIR の skill body 置換、CLAUDE_CODE_EXECPATH の plugin-level unset、CLAUDE_SESSION_ID env 全層 unset（CLAUDE_CODE_SESSION_ID が代替）、install-time validator block 不発、kebab-case 違反は warning only
+
+Cowork 検証 round の次回タスク：probe 13, 14, 15, 16, 17, 18, 19, 20, 21 を Claude Desktop 上で実行し、差分を記録。本リポジトリの zip artifacts (`scripts/package-cowork.sh` の出力) を使う。
