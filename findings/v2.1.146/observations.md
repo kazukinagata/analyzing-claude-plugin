@@ -621,6 +621,59 @@ probe 09 を回した時、`grep -F` が hooks.log の中の `tag=user-prompt-su
 + Skill 起動の OTEL 監視は両 path を UNION で取る必要あり（研究 §9.1 の SQL クエリと整合）
 ```
 
+## probe 10-parallel-hook-firing （§1.10）
+
+`./scripts/assert.sh 10` → **PASS (7/7 matched)**
+
+### subclaim 単位の判定
+
+| § subclaim | research v2.1.118-119 | v2.1.146 実測 | 判定 |
+|---|---|---|---|
+| 同一 hook 配列内の hook は**並列実行**される | ✅（v0.7 array order 観察） | ✅ 完全並列 — 別 pid、start 時刻が近い、end は sleep 順 | PASS |
+| array order ≠ 実行順 | ✅ | ✅ start すら b → c → a（array 宣言は a, b, c） | PASS |
+
+### 実 timestamps（最新 SessionStart）
+
+```
+parallel-b-start: 1779347021137257338 ns  pid=75738
+parallel-c-start: 1779347021142627699 ns  pid=75750  (+5.4ms vs b)
+parallel-a-start: 1779347021145053573 ns  pid=75753  (+7.8ms vs b)
+parallel-c-end:   1779347021148706952 ns  (sleep 0   → +6ms)
+parallel-a-end:   1779347021353025210 ns  (sleep 200ms → +208ms)
+parallel-b-end:   1779347021542495287 ns  (sleep 400ms → +405ms)
+```
+
+### 観察できたこと
+
+1. **別 pid** で 3 プロセス並走（pid=75738/75750/75753）
+2. **start 時刻が ~10ms 窓に収まる** — 同時起動の証拠（順次なら sleep 完了を待つので最低 600ms の差になる）
+3. **end 順序 = sleep 順序**（c < a < b、各 sleep 0/200/400ms と一致） — 並列実行の決定的証拠
+4. **start 順序すら array 順と一致しない** — bonus 観察。OS scheduler が spawn 順を arbitrate しているだけ
+
+これは順次実行（sequential）の場合と明らかに区別可能：
+- 順次なら: a 完了 (200ms) → b 完了 (200ms+400ms=600ms 後) → c 完了 (600ms 後+0ms=600ms 後)。end 順序は a, b, c
+- 並列なら: end 順序は c, a, b（観察通り）
+
+### plugin-level / frontmatter hook 跨ぎの並列も発火
+
+probe 10 の主検証は SessionStart 配列内の並列だが、別 timestamp で見ると plugin-level hook（log.sh）と skill frontmatter hook（00-canary 等の fm-registered tag）も同時 tool 呼び出しに対して並走する観察あり（probe 02 / 08b の log 順序がそれを示唆）。
+
+### 含意
+
+- **`flock` 排他制御は必須**：log.sh のように同じファイルに書き込む hook を複数仕掛けるなら必要。本リポジトリの log.sh は `flock -x 9` で守っているので race condition を避けられている
+- **hook の副作用順序に依存した設計は破綻**：array order でも記述順でもなく、OS scheduler 任せ
+- **timestamp 比較で並列性を実証可能**：probe 10 のパターン（start_ns / end_ns + 異なる sleep）は再現性のある証拠
+
+### 研究 §1.10 改訂提案
+
+```diff
++ v2.1.146 で確認（probe 10）：SessionStart 配列内の 3 hook が別 pid で並列起動。
++ 観察された start 順序は array 宣言順（a, b, c）と異なる（b → c → a などランダム）。
++ end 順序は各 hook の sleep duration に従い、c (0ms) → a (200ms) → b (400ms)。
++ 順次実行（end 順序 = a → b → c）とは数値的に明確に区別される。
++ ファイル書き込みを行う複数 hook は flock 等で排他制御必須（本リポジトリの log.sh が good practice の reference）。
+```
+
 ---
 
-(以降、probe 10-21 を回しながら追記)
+(以降、probe 11-21 を回しながら追記)
