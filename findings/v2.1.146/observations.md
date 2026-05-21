@@ -866,6 +866,46 @@ PARSER_TEST_SEMI_X
 + JSON エスケープ込みで `\\$x` と書く必要あり。CLI / Cowork どちらでも同じ罠。
 ```
 
+## probe 15-cowork-file-io（CLI baseline 部分）（§2.7）
+
+`./scripts/assert.sh 15` → **PASS (3/3 matched)** （CLI baseline）
+
+### CLI baseline subclaim 判定
+
+| § subclaim | CLI 期待 | v2.1.146 CLI 実測 | 判定 |
+|---|---|---|---|
+| frontmatter `PreToolUse:Bash` hook が `/tmp` に file 書き込み可能 | ✅ | ✅ `/tmp/file-io-canary-1779348236387557391.txt` 作成 | PASS |
+| 同じファイルが Bash tool subprocess から `ls -la` で**見える** | ✅ | ✅ `-rw-r--r-- 1 kazukinagata kazukinagata 98 May 21 16:23 /tmp/file-io-canary-...txt` | PASS |
+| hook が呼ばれた証拠が probe.log に出る（独立の証明経路） | ✅ | ✅ `[15-FM-hook fired marker_path=/tmp/file-io-canary-...]` | PASS |
+
+### Cowork で観察すべき項目（deferred）
+
+- 同じ probe を Cowork で回すと **`ls -la /tmp/file-io-canary-*.txt` の結果が「ファイル不在」**になる（§2.7）。Cowork の sandbox が hook プロセスの file write を本体 shell に伝播させない
+- ただし probe.log 経由の `[15-FM-hook fired marker_path=...]` 行は Cowork でも残るので、「hook が起動した」事実と「hook の file 副作用が見えない」事実が同時に観察できる
+- これが §2.7 の根幹：hook の **stdout 経路だけ活きていて file 副作用は別 sandbox にブロックされる**
+
+### 含意
+
+- CLI で hook 内 file write をする plugin は当然動くが、**Cowork 配布前提なら別経路（stdout 経由の additionalContext、外部 API 等）に切り替える設計**が必要（research §3.2 / §3.7 の harness 指針と整合）
+- 本リポジトリの log.sh は file write を使うが、これは検証用の log であって配布想定ではない（Cowork で log が出ないことも併せて記録する）
+
+### 根拠 log
+
+```
+[15-BODY 2026-05-21T16:24:06+09:00] tag=alive-check
+[15-BODY] file-io-canary files in /tmp:
+-rw-r--r-- 1 kazukinagata kazukinagata 98 May 21 16:23 /tmp/file-io-canary-1779348236387557391.txt
+[15-FM-hook fired marker_path=/tmp/file-io-canary-1779348236387557391.txt]
+```
+
+### 研究 §2.7 改訂提案
+
+```diff
++ v2.1.146 CLI baseline （probe 15）：hook 内の file write は普通に届く（/tmp に書いた canary が Bash subprocess の ls で確認できる）。
++ Cowork での file write 不発は別環境で確認する。
++ hook が呼ばれた事実は probe.log への独立 echo で別経路観察可能 — Cowork での「hook 自体は呼ばれたが file が届かない」状態を判定する canary として有用。
+```
+
 ---
 
-(以降、probe 15, 20 — CLI baseline、その他は Cowork パスで)
+(probe 20 — CLI baseline。その他は Cowork パスで)
