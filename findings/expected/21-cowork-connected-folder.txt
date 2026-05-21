@@ -2,6 +2,6 @@
 # Manual-heavy probe — most observations are user-recorded.
 
 @probe.log
-tag=alive-check
+[21-BODY] tag=alive-check
 Write trial: outputs/
 Write trial: plugin dir

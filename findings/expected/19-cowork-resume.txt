@@ -1,7 +1,7 @@
 # §2.1 Cowork resume re-fire — observation depends on Desktop suspend.
 
 @probe.log
-tag=alive-check (1st invoke)
+[19-BODY] tag=alive-check (1st invoke)
 
 @hooks.log
 source=resume

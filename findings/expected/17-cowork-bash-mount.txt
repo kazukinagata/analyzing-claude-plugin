@@ -1,7 +1,7 @@
 # §2.10 bash mount + bundled script invocation patterns
 
 @probe.log
-tag=alive-check
+[17-BODY] tag=alive-check
 [17-say-hi pwd=
 Pattern A: cd
 Pattern B: bash

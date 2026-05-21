@@ -72,10 +72,14 @@ done
     echo "probe 00-canary did not PASS. All subsequent verdicts should be treated as **CANARY-FAILED** regardless of the table above — the observation infrastructure itself is broken in this version."
     echo
   fi
+  echo "## Cowork-only probes (deferred until Cowork verification pass)"
+  echo
+  echo "probes 16, 17, 18, 19, 21 are designed to run only inside Claude Desktop's Cowork environment (path forms / bash mount / DATA isolation / resume / connected folders). They cannot be exercised from the CLI. If they appear as FAIL or UNKNOWN above, that is the expected baseline — read findings/v.../observations.md for the deferred items list."
+  echo
   echo "## verdict meanings"
   echo
   echo "- **PASS** — finding still holds (log matches expected)"
-  echo "- **FAIL** — finding has changed (alive-check present but expected pattern missing)"
+  echo "- **FAIL** — finding has changed (alive-check present but expected pattern missing) — for Cowork-only probes, this just means the probe wasn't run from the CLI side"
   echo "- **PARTIAL** — some subclaims match, some don't"
   echo "- **UNKNOWN** — observation failed (alive-check missing, can't tell if finding changed)"
   echo "- **DOC-ALIGNED** — finding changed in a direction that aligns with docs (bug fixed)"
