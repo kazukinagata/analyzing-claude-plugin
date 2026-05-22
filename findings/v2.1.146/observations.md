@@ -1245,3 +1245,38 @@ probe 14 で `UserPromptSubmit` 配列に 2 entry 仕込んだところ、両方
 - `&&` `||` が動くようになったので bash -c 内で複数コマンド連結のパターンが書きやすくなった
 - ただし `printf` `cat` `sh -c` 等 echo/bash 以外の builtin / 外部コマンドは依然 outer parser で reject される
 - 配布前に **Cowork 実機で hooks の echo 出力を Claude 経由で確認する** のが事実上唯一の検証手段（CLI の `claude plugin validate` では検知不能）
+
+## probe 15-cowork-file-io（Cowork）— PASS（§2.7 確認）
+
+新規 Cowork chat で `/verifier:15-cowork-file-io` を起動。
+
+### 観測
+
+```
+[15-BODY 2026-05-22T02:26:13+00:00] tag=alive-check
+[15-BODY] file-io-canary files in /tmp:
+ls: cannot access '/tmp/file-io-canary-*.txt': No such file or directory
+=== Full probe.log === (skill body の 15-BODY 行のみ。15-FM-hook 行は無し)
+=== find /tmp -name 'file-io-canary-*' === (該当なし)
+Hook did NOT write to probe.log (no 15-FM-hook line found)
+Canary file MISSING from /tmp — hook file writes did NOT reach sandbox
+```
+
+### subclaim 別 verdict
+
+| subclaim | 観測 | verdict |
+|---|---|---|
+| (a) hook の inline echo が Claude context に届く | probe 14 で SessionStart / UserPromptSubmit について確認済（PreToolUse も probe 13 で間接確認） | PASS（間接） |
+| (b) hook が `/tmp/...` に書いた file が bash sandbox から見えない | `ls /tmp/file-io-canary-*.txt` で `No such file or directory` | PASS |
+| (c) hook が `${CLAUDE_PLUGIN_DATA}` に書いた file が bash sandbox から見えない | hook の log line `15-FM-hook` が probe.log に追記されていない | PASS |
+| (d) 不可視時のエラー形態 | `ls: cannot access ...: No such file or directory`（silent ではなく明示的なエラー）| 観察 |
+
+### 結論
+
+§2.7 の主張「Cowork で hook 内の file 副作用は届かない」が v2.1.146-148 でも維持されている。**hook と Bash tool の bash sandbox は完全に別の filesystem namespace に分離**されており、両者が同じ `/tmp` パスを使っても **物理的に別の `/tmp` を見ている**（hook 側で書いても bash 側は空、bash 側で書いても hook 側は読めない）。
+
+### Plugin 作者向け takeaway
+
+- Cowork で `${CLAUDE_PLUGIN_DATA}` への永続化に依存する設計は機能しない（read 不可）
+- hook で state を持ちたい場合は **stdout 経由で additionalContext として model に injection** する以外の手段が無い（つまり「持続的な state」は実現不能、毎回 hook が echo で context に乗せ直す形しか取れない）
+- bash sandbox から `ls` が `No such file or directory` を返すので、**「書いてはいるが reader が見えない」のではなく「書込側か reader 側のどちらかで失敗している」と plugin 開発者には認知される**（silent ではない、診断はしやすい）
