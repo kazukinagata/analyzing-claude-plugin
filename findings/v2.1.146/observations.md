@@ -1001,3 +1001,124 @@ CLI 環境で実行可能な probe をすべて完走：
 - 主な仕様変更：CLAUDE_PROJECT_DIR の skill body 置換、CLAUDE_CODE_EXECPATH の plugin-level unset、CLAUDE_SESSION_ID env 全層 unset（CLAUDE_CODE_SESSION_ID が代替）、install-time validator block 不発、kebab-case 違反は warning only
 
 Cowork 検証 round の次回タスク：probe 13, 14, 15, 16, 17, 18, 19, 20, 21 を Claude Desktop 上で実行し、差分を記録。本リポジトリの zip artifacts (`scripts/package-cowork.sh` の出力) を使う。
+
+---
+
+# Cowork 検証 round（v2.1.147 / v2.1.148）
+
+実行日：2026-05-22
+Claude Code が verification round 中に **v2.1.146 → v2.1.147 → v2.1.148 と 2 回 bump**。Cowork 内 VM のバージョンは未確認だが、ホスト CLI バージョンが大幅に短期間で進化していることだけ記録。
+
+## §2.3 確認：Cowork validator が CLI より圧倒的に strict
+
+`verifier-cowork.zip`（CLI で `claude plugin validate` / install 通過済）を Claude Desktop の Cowork セッションで upload → **`Plugin validation failed`** generic エラーで reject。理由表示なし。
+
+これは **research §2.3 の主張（CLI 具体エラー / Cowork generic 拒否、Plugin validation failed）が v2.1.147/v2.1.148 でも継続**を確定。
+
+## bisect で判明した複数の reject 要因
+
+二分探索で 21 個の skill zip を Cowork upload に投じて narrow した結果、CLI で通る plugin を Cowork が reject する **複数の独立した validator rule** が判明：
+
+### Finding A: plugin name の kebab-case 強制（hard reject）
+
+**probe 20 で取った CLI baseline と決定的な差分**：
+
+| 環境 | uppercase 含む plugin name の扱い |
+|---|---|
+| CLI (`claude plugin validate`) | ⚠ warning：`Plugin name "X-Y-Z" is not kebab-case. Claude Code accepts it, but the Claude.ai marketplace sync requires kebab-case` → 続行（`Validation passed with warnings`） |
+| Cowork（zip upload） | ❌ **hard reject**：`Plugin validation failed`（generic、理由表示なし） |
+
+具体的観察：
+- `verifier-cowork-bisect-C-first-no-suspects.zip` （plugin name に `C` 含む）→ Cowork で fail
+- 全く同じ skills 8 個を `verifier-cowork-bisect-c-first-no-suspects.zip`（C を c に変えただけ）にリネーム → Cowork で**通過**
+
+これは research §2.3 / probe 20 の **CLI warning vs Cowork generic-rejection の対比を強化する確証**。配布の実用面では：
+- **CLI の warning は無視できない** — Cowork に出すなら kebab-case 厳守
+- CI で plugin 配布前チェックする場合、`claude plugin validate` の **warning も exit-failure として扱うべき**（現状の `Validation passed with warnings` exit code 0 では Cowork-incompat plugin が release されてしまう）
+
+### Finding B: skill frontmatter hook command 内の `${PWD^^}` （bash 固有 parameter expansion）
+
+probe 03-shell-binsh の frontmatter hook に bash 固有の `${PWD^^}` がリテラル含まれていた。**CLI**：問題なく install（research §1.3 / probe 03 確認済 — hook 実行時に `/bin/sh` で Bad substitution）。**Cowork**：**install 時点で reject**。
+
+`${PWD^^}` を `PWD_PLACEHOLDER` 等のリテラルに置換すると Cowork install 通過。Cowork validator が hook command 内の `${VAR^^}` `${VAR,,}` 系 bash-specific parameter expansion を**事前 scan して reject** している可能性。
+
+### Finding C: YAML single-quoted string の closing quote 省略
+
+probe 03-shell-binsh の frontmatter `command:` 行（`; exit 0` で終わる）に **closing single quote `'` 漏れ**があった。CLI の YAML parser は何らかの forgiving 解釈で受理（`claude plugin validate` PASS）。Cowork validator はおそらく strict YAML parser で reject。修正後（closing `'` 追加）、Cowork が当該 skill を受理。
+
+### Finding D: skill 累積 content threshold（v2.1.148 で観察）
+
+- 22 個の simple clone skill（frontmatter 無し、body subst 無し、plain text）→ Cowork 通過
+- 7 個の real skill（本物 frontmatter hook + body subst）→ Cowork 通過
+- 8〜11 個の real skill 累積（特定の skill 組み合わせ）→ Cowork reject
+
+すなわち **single skill content の複雑さ × skill 数の累積**で threshold 超過。具体的な量化指標（token / character / hook count）は未特定。bisect 続行中（**現状の bisect で 16/17/18/19/20/21 のうち少なくとも 1 つが breaker** と判明）。
+
+### Finding F: skill `description:` field の特定 token も hard reject
+
+probe 17 の description field に以下を入れたら Cowork install fail：
+
+```yaml
+description: "Cowork mounts the plugin install dir under /sessions/<codename>/mnt/.remote-plugins/ (read-only). Bundled scripts can be launched via relative path; ${CLAUDE_SKILL_DIR} expands to a Windows path that fails directly. ..."
+```
+
+narrowing で `${CLAUDE_SKILL_DIR}` リテラルと `<codename>` angle brackets の**どちらか単独でも reject** に確定：
+
+| description 内容 | Cowork install |
+|---|---|
+| `${CLAUDE_SKILL_DIR}` のみ | ❌ reject |
+| `<codename>` angle brackets のみ | ❌ reject |
+| 両方含む | ❌ reject |
+| `CLAUDE_SKILL_DIR` (bare token、no `${}`) + `CODENAME` literal | ✅ install OK |
+
+ただし他 skill の description で `${VAR}` リテラル（probe 02 / 07）は**通る** — `${VAR}` は CLAUDE_* prefix ではないので Cowork が substitute を試みず literal 扱いする仮説。`${CLAUDE_*}` 形式だと substitute path に入って validator が引っかかる。
+
+`<...>` angle brackets は HTML-like 構文として markdown / metadata layer で何らかの parser が処理しようとして fail する可能性。
+
+### 修正方法
+
+```diff
+- description: "... /sessions/<codename>/mnt/ ... ${CLAUDE_SKILL_DIR} ..."
++ description: "... /sessions/CODENAME/mnt/ ... CLAUDE_SKILL_DIR ..."
+```
+
+→ `${VAR}` 形式の説明を諦めて bare token に書き換える。`<placeholder>` 形式の説明を `PLACEHOLDER` や `<codeword>` 風の literal text に書き換える。
+
+### Finding E: Cowork rejection は CLI から完全に detect 不可能
+
+research §2.3 の主張通り、Cowork rejection の理由は generic "Plugin validation failed" のみ。CLI の `claude plugin validate` / `claude plugin install` で **shadow validation できない**。Cowork-compat な plugin を配布したい場合：
+
+1. plugin name は **完全に kebab-case**（lowercase letters + digits + hyphens のみ）
+2. hook command から **bash-specific syntax**（`${VAR^^}` `${VAR,,}` 等）を完全排除
+3. YAML 文法を strict に守る（特に single-quoted string の closing quote）
+4. skill content を可能な限り simple に保つ（具体的閾値は未特定だが、frontmatter hook + body subst を持つ real skill を 7 個以下に抑えるのが安全）
+5. Cowork-only な observable には **stdout / additionalContext 経路**のみ使う（file I/O は §2.7 通り無効）
+
+これらは CLI 側からの `claude plugin validate` では検知できないので、**Cowork 実機での upload 試験を CI に組み込む必要**がある。
+
+## 最終的に Cowork-installable になった verifier-cowork.zip の状態
+
+bisect の結果、以下を満たすことで Cowork install 通過：
+
+1. **closing quote 修正**：probe 03 SKILL.md frontmatter `command:` 行末に欠けていた `'` を追加
+2. **probe 17 description 修正**：`${CLAUDE_SKILL_DIR}` → `CLAUDE_SKILL_DIR` (bare)、`/sessions/<codename>/` → `/sessions/CODENAME/`
+3. UserPromptExpansion strip（既存の package-cowork.sh で対応済）
+
+これで 22 個全 skill 含む verifier プラグインが Cowork で install 可能になり、probe 13-21 の本格検証に進めるようになった。
+
+なお、最終的に Cowork-installable verifier.zip を「研究のリファレンス実装」として残す価値は高い — plugin 作者が Cowork-compat な plugin を書くための good-practice template になる。
+
+
+
+## §2.3 の改訂提案
+
+```diff
++ v2.1.147/v2.1.148 で確認（実機 upload bisect）：Cowork validator は CLI より**有意に strict**。CLI で warning のみで通る違反項目を Cowork は hard reject する。具体的に判明した reject 対象：
++ 1. plugin name の kebab-case 違反（CLI ⚠ warning / Cowork ❌ hard reject）
++ 2. hook command 内の `${VAR^^}` bash-specific parameter expansion（CLI ✅ accept、実行時に Bad substitution）
++ 3. YAML single-quoted string の closing quote 漏れ（CLI 受理する forgiving parser、Cowork strict）
++ 4. **skill `description:` field 内の `${CLAUDE_*}` substitution markers と `<...>` angle brackets**
++ 5. skill body / frontmatter command content の累積 threshold（具体閾値未特定）
++ Cowork rejection は generic `Plugin validation failed` のみで理由表示無し（研究 §2.3 主張継続）。
++ 配布前ワークフローは「CLI validate + warning も failure 扱い + Cowork 実機 upload 試験」の 3 段が必要。
+```

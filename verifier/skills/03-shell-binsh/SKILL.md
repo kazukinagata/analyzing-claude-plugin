@@ -7,7 +7,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: '{ printf "[03-FM-bashisms %s] BASH_VERSION=[%s] uppercased=[${PWD^^}]\n" "$(date -Iseconds)" "$BASH_VERSION" 2>&1; } >> "$CLAUDE_PROJECT_DIR/findings/${VERIFIER_VERSION_DIR:-v-unknown}/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>&1 ; exit 0
+          command: '{ printf "[03-FM-bashisms %s] BASH_VERSION=[%s] uppercased=[${PWD^^}]\n" "$(date -Iseconds)" "$BASH_VERSION" 2>&1; } >> "$CLAUDE_PROJECT_DIR/findings/${VERIFIER_VERSION_DIR:-v-unknown}/${CLAUDE_SESSION_ID:-no-sid}/probe.log" 2>&1 ; exit 0'
 ---
 
 # 03-shell-binsh

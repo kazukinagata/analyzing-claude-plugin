@@ -1,6 +1,6 @@
 ---
 name: 17-cowork-bash-mount
-description: "Cowork mounts the plugin install dir under /sessions/<codename>/mnt/.remote-plugins/ (read-only). Bundled scripts can be launched via relative path; ${CLAUDE_SKILL_DIR} expands to a Windows path that fails directly. CLI baseline lets both patterns work (research section 2.10)."
+description: "Cowork mounts the plugin install dir under /sessions/CODENAME/mnt/.remote-plugins/ read-only. Bundled scripts can be launched via relative path; CLAUDE_SKILL_DIR expands to a Windows path that fails directly. CLI baseline lets both patterns work. See research section 2.10."
 user-invocable: true
 ---
 
