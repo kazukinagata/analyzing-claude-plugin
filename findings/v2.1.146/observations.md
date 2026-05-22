@@ -1122,3 +1122,43 @@ bisect の結果、以下を満たすことで Cowork install 通過：
 + Cowork rejection は generic `Plugin validation failed` のみで理由表示無し（研究 §2.3 主張継続）。
 + 配布前ワークフローは「CLI validate + warning も failure 扱い + Cowork 実機 upload 試験」の 3 段が必要。
 ```
+
+---
+
+# Cowork 実機 probe 検証（2026-05-22）
+
+verifier-cowork.zip install 通過後、Claude Desktop の Cowork session（codename: `elegant-exciting-brown`）で各 probe を順次実行。
+
+## probe 00-canary（Cowork）— PASS（観測戦略の確定）
+
+**結果**：skill body の bash は動作。alive-check tag は probe.log に書けた。
+
+```
+[00-canary-body 2026-05-22T01:51:13+00:00] tag=alive-check sid=no-sid
+```
+
+ディレクトリ作成パス: `/sessions/elegant-exciting-brown/findings/v-unknown/no-sid/`
+
+- `$CLAUDE_PROJECT_DIR` UNSET in Bash tool subprocess → `:-$PWD` fallback で `/sessions/elegant-exciting-brown` に解決
+- `$CLAUDE_SESSION_ID` UNSET → `no-sid` fallback
+- `$VERIFIER_VERSION_DIR` UNSET → `v-unknown` fallback
+- **`hooks.log` は不在**：plugin-level SessionStart hook の file write が bash sandbox に届かない（`tail: cannot open '/sessions/elegant-exciting-brown/findings/v-unknown/no-sid/hooks.log' for reading: No such file or directory`）
+
+### §1.1 確認：env 伝播 3 階層は Cowork でも非対称（CLI と同じ）
+
+Bash tool subprocess に `CLAUDE_PROJECT_DIR` `CLAUDE_SESSION_ID` 何も継承されない。CLI baseline（probe 01 PASS）と一致。
+
+### §2.7 確認：plugin-level hook → bash sandbox の file I/O 隔離
+
+`hooks.log` が `/sessions/.../findings/v-unknown/no-sid/` に存在しない。CLI なら必ず存在する（plugin-level SessionStart hook の log.sh 経由）。
+
+### Cowork-specific observation strategy（残り probe の判定ルール）
+
+`probe.log` には書ける（skill body の bash 自体は file write 可）が、`hooks.log` には書けない（plugin-level hook の write が bash 経由で見えない）。
+
+→ **残り 8 probe の観測経路**：
+1. **skill body の bash 内 echo** — Claude の応答画面に出る（信頼可能）
+2. **hook の stdout (additionalContext)** — Claude の応答テキストに混入される可能性（次 probe で検証）
+3. **hook の file write** — 不可（§2.7）
+
+つまり、hook の発火を Cowork で観測するには **hook command の echo を Claude の応答テキストに探す** しかない。bash 経由で `cat hooks.log` しても見えないため、各 probe の判定は Claude の応答画面（コピペ）全体を見て判定する。
