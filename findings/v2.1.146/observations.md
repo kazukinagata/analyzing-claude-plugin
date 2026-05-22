@@ -1434,3 +1434,50 @@ EXP_BASH_DOLLAR / EXP_BASH_BRACE の PATH 値が以下の経路を含む：
 4. hook subprocess の cwd は何か（user's local Claude Desktop の cwd？plugin dir？）
 
 これらは plugin 作者の security threat model にも関わる。Cowork は cloud VM を "trusted" として扱うが、**plugin hook は user's local machine で実行される** ので host への影響は限定的（Cowork sandbox の外側）。
+
+## probe 17-cowork-bash-mount（Cowork）— PASS（§2.10 完全一致）
+
+新規 Cowork chat（codename: `affectionate-exciting-ptolemy`）で `/verifier:17-cowork-bash-mount` 実行。
+
+### 観測
+
+```
+[17-BODY 2026-05-22T02:45:38+00:00] tag=alive-check
+[17-BODY] CLAUDE_SKILL_DIR=[(unset)]
+[17-BODY] CLAUDE_PLUGIN_ROOT=[(unset)]
+Pattern A: cd /sessions/affectionate-exciting-ptolemy/mnt/.remote-plugins/plugin_01Bf44yjuV9jiutc7dYNcHHc/skills/17-cowork-bash-mount && bash scripts/say-hi.sh
+[17-say-hi pwd=/sessions/affectionate-exciting-ptolemy/mnt/.remote-plugins/plugin_01Bf44yjuV9jiutc7dYNcHHc/skills/17-cowork-bash-mount script=scripts/say-hi.sh]
+
+Pattern B: bash "C:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/.../scripts/say-hi.sh"
+bash: C:/Users/knaga/.../say-hi.sh: No such file or directory
+
+[17-BODY trap-mkdir] before=findings mnt tmp
+[17-BODY trap-mkdir] after=C: findings mnt tmp
+```
+
+| 観測項目 | 結果 | §2.10 期待 |
+|---|---|---|
+| Pattern A (`find /sessions` + cd + relative bash) | ✅ 成功 | ✅ 一致 |
+| Pattern B (Windows path 直接) | ❌ `No such file or directory` | ✅ 一致 |
+| `mkdir -p "C:/Users/..."` の罠 | $PWD 配下に literal `C:` dir 生成 | ✅ §2.10.3 一致 |
+| Bash tool subprocess の `$CLAUDE_SKILL_DIR` | UNSET | ✅ §1.1 一致 |
+| Bash tool subprocess の `$CLAUDE_PLUGIN_ROOT` | UNSET | ✅ §1.1 一致 |
+| plugin mount 権限 | read-only (`dr-x------`) | ✅ §2.10 一致 |
+
+### 新モデル下での解釈
+
+probe 16 follow-up で確定した「hook = local Claude Desktop / bash tool = cloud VM」モデルが §2.10 の挙動も統一的に説明する：
+
+- **Pattern A 成功の理由**：bash tool は cloud VM 内で動くので `find /sessions/<codename>/mnt/.remote-plugins/` で plugin install dir を直接見れる。relative path で `scripts/say-hi.sh` を起動できる
+- **Pattern B 失敗の理由**：`${CLAUDE_SKILL_DIR}` は Claude Desktop (local) が substitute → user's local Windows path（`C:/Users/knaga/...`）に置換される → cloud VM 内の bash subprocess にはそのような path は存在しない → `No such file or directory`
+- **`mkdir -p "C:/..."` の罠**：cloud VM の bash は `:` を path separator として解釈しないが、コロン以前を 1 つの component として扱う → `mkdir -p "C:/foo/bar"` は **$PWD 配下に `C:` という名前のディレクトリと、その下に `foo/bar` を作る**。Pattern B の `bash <windows-path>` 自体は失敗するが、`mkdir -p <windows-path>` は silent success してゴミが残る危険な非対称性
+
+### Plugin 作者向け実用 takeaway（再強調）
+
+| やりたい操作 | Cowork で動くか | やり方 |
+|---|---|---|
+| bundled script を hook 内から実行 | ✅ hook は local 実行なので Windows path で OK | hook 内で direct path 指定 |
+| bundled script を skill body の Bash tool から実行 | ✅ ただし要工夫 | **`find /sessions -path '*/skills/<name>' -type d` で localize**してから relative path |
+| bundled script の path を skill body 内で `${CLAUDE_SKILL_DIR}` 経由で組み立て | ❌ Windows path に substitute されて cloud VM bash で失敗 | 使うな |
+| `${CLAUDE_PLUGIN_DATA}` への永続化 | ❌ §2.7 で確認、書き込み届かない | session-scope の context injection 経由のみ |
+| `mkdir -p "$VAR"` で fallback dir 作成 | ⚠️ `$VAR` が Windows path だと literal `C:` ゴミ生成 | 必ず `[ -z "$VAR" ] || [[ "$VAR" =~ ^[A-Z]: ]] && return` 等で先ガード |
