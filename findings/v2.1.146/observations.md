@@ -1662,3 +1662,134 @@ cat: '/sessions/bold-epic-hamilton/mnt/.remote-plugins/*/plugin.json': Permissio
 + - VM レベルでは shared なので、カーネル exploit 等の vector は user account boundary に依存
 + - 「Cowork は完全な per-chat VM」という素朴な前提は誤り — per-user shared VM + per-chat user isolation
 ```
+
+## probe 21-cowork-connected-folder（Cowork）— PASS + filesystem architecture 完全解明
+
+`/verifier:21-cowork-connected-folder` を別 Cowork chat (codename: `eloquent-pensive-cerf`) で実行。書込 4 target + `request_cowork_directory` 試行。
+
+### §2.9 各 subclaim verdict
+
+| 操作 | 期待 | 観測 |
+|---|---|---|
+| `outputs/` 書込 (bash + Write tool) | OK | ✅ |
+| plugin dir 書込 | FAIL (read-only mount) | ✅ `Read-only file system` |
+| `uploads/` 書込 | FAIL | ✅ |
+| plugin dir read (`ls`) | OK | ✅ |
+| `request_cowork_directory` to session-internal | FAIL | ✅ 拒否（"That directory is Cowork's internal session storage..."） |
+| `request_cowork_directory` to user folder (Documents) | OK after approval | ✅ Folder connected |
+| Connected folder write (Write tool + bash) | OK | ✅ 両方とも write success |
+| **Connected folder の rm (bash)** | ?（未仕様）| ❗ **`Operation not permitted`**（新発見） |
+
+### 新発見：Cowork filesystem は virtio-fs / FUSE bind mount
+
+`mount | grep sessions` で完全な architecture 判明：
+
+```
+/dev/sdc on /sessions type ext4 (rw,nosuid,relatime)
+/mnt/.virtiofs-root/shared/c/Users/knaga/.../outputs on C:\Users\knaga\AppData\...\outputs type fuse (rw,...)
+/mnt/.virtiofs-root/shared/c/Users/knaga/.../uploads on C:\Users\knaga\AppData\...\uploads type fuse (ro,...)
+/mnt/.virtiofs-root/shared/c/Users/knaga/.../rpm/plugin_<id> on /sessions/<codename>/mnt/.remote-plugins/plugin_<id> type fuse (ro,...)
+/mnt/.virtiofs-root/shared/c/Users/knaga/.../local_<sess-uuid>/.claude/projects on /sessions/<codename>/mnt/.claude/projects type fuse (ro,...)
+/mnt/.virtiofs-root/shared/c/Users/knaga/.../skills-plugin/.../skills on /sessions/<codename>/mnt/.claude/skills type fuse (ro,...)
+```
+
+→ **`/sessions/` 全体は VM-local ext4 (`/dev/sdc`)、各 chat の `mnt/` 配下が host Windows のディレクトリを virtio-fs で bind mount**。
+
+Mount flags で permission 制御：
+- `outputs/` → `rw` (writable)
+- `uploads/`, plugin dirs, `.claude/projects`, `.claude/skills` → `ro` (read-only)
+- Connected folder via `request_cowork_directory` → `rw`
+
+### 新発見：Cowork VM 実体は host-adjacent な可能性が高い
+
+`/mnt/.virtiofs-root/shared/c/Users/knaga/...` で host の `C:/Users/knaga/...` が直接 virtio-fs 経由で mount されている。virtio-fs は通常 **同じ物理マシン上の host と guest VM 間のディレクトリ共有**に使う仕組み。
+
+→ Cowork VM は「Anthropic cloud」ではなく、**ユーザの local Windows + WSL/Hyper-V スタック上で Anthropic がスポーンする隣接 VM** の可能性が極めて高い：
+
+- codename rotation 速度（chat 開始がほぼ即時）→ local VM spawn が cloud spawn より速い
+- hook subprocess の PATH に `/mnt/c/Users/knaga/...` が含まれる → hook は host machine (WSL Ubuntu) で実行されているから（probe 16 follow-up で確認）
+- virtio-fs での host filesystem 共有 → host と guest が同じ物理マシン
+- 175 codename dir が同じ `/sessions/` namespace → 同じ物理マシン上の VM filesystem に蓄積
+
+これは大きな architecture 訂正：**Cowork = ローカル隣接 VM + virtio-fs filesystem 共有**。「クラウド」と呼ぶ場合の意味は「Anthropic 提供の sandboxed env」程度。
+
+### 新発見：rm guard on RW mounts
+
+Connected folder は rw mount だが、bash の `rm` が `Operation not permitted` で blocked：
+
+```
+rm: cannot remove 'C:\Users\knaga\Documents\canary-21-bash.txt': Operation not permitted
+```
+
+mount flags で `rw` でも user_id=0 (root) でも、**FUSE filter または上位 Cowork guard が delete を block**。これは：
+
+- Plugin がユーザの host file を消すことができない、という safety guarantee
+- `request_cowork_directory` の RW は実質「RW + create-new + modify、delete 不可」
+- Plugin 作者は「Cowork で `rm`/`unlink` 系は使えない」前提でツール設計する必要
+
+### §2.9 改訂提案
+
+```diff
++ Cowork filesystem layout（v2.1.146-148 実機 mount 出力で確認）:
++
++ /sessions/                          local ext4 (rw,nosuid)
++ ├─ <codename>/                      chat sandbox root
++ │  └─ mnt/                          virtio-fs bind mounts to host
++ │     ├─ outputs/                   ← rw (host: local_<sess>/outputs/)
++ │     ├─ uploads/                   ← ro (host: local_<sess>/uploads/)
++ │     ├─ .claude/projects/          ← ro (host: local_<sess>/.claude/projects/)
++ │     ├─ .claude/skills/            ← ro (host: skills-plugin/.../skills/)
++ │     └─ .remote-plugins/
++ │        └─ plugin_<id>/            ← ro (host: rpm/plugin_<id>/)
++ │
++ ├─ <other-codename>/                他 chat 用、POSIX permission で完全隔離
++ └─ cli-<hex>/                       CLI claude session の痕跡
++
++ Plugin 作者向け実用 takeaway:
++ - 書込可能：outputs/ + request_cowork_directory で承認された folder のみ
++ - rm/unlink/delete は connected folder でも block される（FUSE guard）
++ - plugin dir 配下は完全 read-only — bundled file の generation や caching は不可
++ - 永続化が必要なら outputs/ に書く（次回 chat では新しい outputs/ になることを覚悟）
+```
+
+---
+
+# Cowork 検証 round 総括（2026-05-22）
+
+verifier-cowork.zip + 専用補助 zip 4 個 (parser-tests, path-forms, expansion-test, data-isolation) を使った Cowork 実機検証完走。CLI baseline は v2.1.146 で 15 PASS + 2 PARTIAL + 5 Cowork-deferred で先行記録済。Cowork 検証で：
+
+## Cowork probe 結果
+
+| probe | § | verdict |
+|---|---|---|
+| 00-canary (Cowork) | — | PASS（観測戦略確定：file I/O 死亡、stdout のみ） |
+| 13-cowork-pretooluse | §2.5 | PASS（block 不発 + `mcp__workspace__bash` 確認） |
+| 14-cowork-parser | §2.6 | **DOC-ALIGNED**（`&&` / `\|\|` が v2.1.146-148 で動くようになった） |
+| 15-cowork-file-io | §2.7 | PASS |
+| 16-cowork-path-forms | §2.8 | **PARTIAL**（3 path forms → 1 form only、新モデルで再解釈）|
+| 16 follow-up (PATH expansion) | §1.2 | **NEW**（top-level echo は literal emission、bash -c のみ実 shell） |
+| 17-cowork-bash-mount | §2.10 | PASS |
+| 18-cowork-data-isolation | §2.11 | PASS + security architecture 解明 |
+| 19-cowork-resume | §2.1 / §2.12 | PASS + 175 dir / virtio-fs / per-user VM 確認 |
+| 20-cowork-validation | §2.3 | PASS（bisect フェーズで Finding A-F 取得済） |
+| 21-cowork-connected-folder | §2.9 | PASS + virtio-fs mount architecture 完全解明 + rm guard 発見 |
+
+## 主な新発見
+
+1. **Cowork architecture model**: ユーザ機上の WSL/Hyper-V 隣接 VM + virtio-fs host filesystem 共有
+2. **hook execution location**: hook は user's local Windows / WSL Claude Desktop process で動く（cloud VM ではない）
+3. **bash tool execution location**: cloud VM (`hostname=claude`) の bash subprocess
+4. **per-user shared VM** + **per-chat user isolation**（POSIX permission レベルの cross-chat isolation）
+5. **/sessions/ metadata leak**（codename inventory 175 dir が任意の plugin から見える）
+6. **CLI session も同じ filesystem に痕跡を残す**（`cli-<hex>` 形式）
+7. **Cowork hook command parser モデル**: top-level = literal emission、bash -c = 実 shell
+8. **Connected folder の rm guard**: RW mount でも delete blocked
+
+## 研究 v2.1.119 → v2.1.146-148 主要変化
+
+- §2.6 parser whitelist 緩和（`&&` / `\|\|` 動くようになった、`printf` は依然 reject）
+- §2.8 path 3 形式 → 1 形式に縮退（hook 経路は literal `${VAR}` で出る）
+- §1.1 hook env: plugin-level hook subprocess に `CLAUDE_PLUGIN_ROOT` / `DATA` が伝わらなくなった（regression）
+- §2.3 Cowork validator が更に厳しくなった（kebab-case 強制、description の `${VAR}` token reject 等、Finding A-F）
+
+Cowork 検証は以上で完了。次フェーズは research.md への改訂提案 PR 作成。
