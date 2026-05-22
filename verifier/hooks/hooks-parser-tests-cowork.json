@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo PARSER_TEST_BARE" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_DQ\"" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_SEMI; echo PARSER_TEST_SEMI_X\"" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_PIPE | cat\"" },
+          { "type": "command", "command": "bash -c \"x=foo; echo PARSER_TEST_VAR_$x\"" },
+          { "type": "command", "command": "bash -c \"true && echo PARSER_TEST_AND\"" },
+          { "type": "command", "command": "bash -c \"false || echo PARSER_TEST_OR\"" },
+          { "type": "command", "command": "printf PARSER_TEST_PRINTF\\\\n" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "echo PARSER_TEST_UPS_BARE" },
+          { "type": "command", "command": "bash -c \"echo PARSER_TEST_UPS_DQ\"" }
+        ]
+      }
+    ]
+  }
+}
