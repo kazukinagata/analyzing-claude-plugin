@@ -1572,3 +1572,93 @@ BASH_VM_SUBST_DATA=...local_014663c6-30e8-4b92-be54-3b4060e8c34e/.claude/plugins
 + ※ v2.1.146-148 Cowork 観測: plugin-level hook subprocess でも CLAUDE_PLUGIN_ROOT / DATA が UNSET。
 + Skill body の ${VAR} 置換だけは Claude Desktop による事前置換で機能する。
 ```
+
+## probe 19-cowork-resume + cross-chat security 追検（Cowork）— PASS + 重大な security findings
+
+Chat A を window 非アクティブで 3 分以上放置 → 戻って `/verifier:data-readback` 再起動 + 追加 bash で `/sessions/` 全体観察。
+
+### §2.12 同一 chat 内 suspend/resume 跨ぎの永続化 — PASS
+
+| マーカー | Context A (initial) | Context C (resume後) | 一致 |
+|---|---|---|---|
+| BASH_VM_CWD | `/sessions/modest-intelligent-lamport` | 同上 | ✅ |
+| BASH_VM_HOSTNAME | `claude` | 同上 | ✅ |
+| BASH_VM_CODENAME (= ls /sessions head -1) | `adoring-admiring-albattani` | 同上 | ✅ |
+| BASH_VM_SUBST_ROOT inner | `plugin_016wgiSBoyPhGDjfxTrFRJg8` | 同上 | ✅ |
+| BASH_VM_SUBST_DATA inner | `local_7f0307bb-d2bc-41ff-a5ae-997bb4a76d52` | 同上 | ✅ |
+
+→ Cowork の resume は **同じ user account + 同じ working directory + 同じ DATA path** に戻る。VM identity 完全保持。
+
+### §2.1 SessionStart `source=resume` 再発火 — PASS
+
+resume 後の context に新規 `HOOK_START_*` 行が出現（"SessionStart:resume hook success" ラベル付き）。`UserPromptSubmit` hook も resume 後 context に再注入された（HOOK_HOST_* 5 行が再度出現）。
+
+研究 §2.1 の主張「Cowork は同一 session_id で `source=resume` 付き SessionStart が複数回発火する」が v2.1.146-148 でも維持されている。
+
+### 新発見：Cowork の cross-session isolation は POSIX user/group permission 実装
+
+Chat A から `ls -la /sessions/` を実行した結果（**175 dir** が visible）：
+
+```
+drwxr-x---   4 modest-intelligent-lamport modest-intelligent-lamport ... modest-intelligent-lamport  ← 自セッション
+drwxr-x---   4 nobody                     nogroup                    ... bold-epic-hamilton           ← 他セッション
+drwxr-x---   4 nobody                     nogroup                    ... adoring-admiring-albattani   ← 他セッション
+...
+```
+
+- 自分の chat の sandbox dir：owner = group = 自セッションの codename
+- 他 chat の sandbox dir：owner = group = `nobody:nogroup`
+- `drwxr-x---` mode で **他人の owner だと group / others は何も読めない**
+
+確認テスト：
+```
+$ cd /sessions/bold-epic-hamilton
+bash: line 4: cd: /sessions/bold-epic-hamilton: Permission denied
+$ cat /sessions/bold-epic-hamilton/mnt/.remote-plugins/*/plugin.json
+cat: '/sessions/bold-epic-hamilton/mnt/.remote-plugins/*/plugin.json': Permission denied
+```
+
+→ cross-session の **data 読み取りは完全 block**。security 観点では強い isolation。
+
+### 新発見：Cowork VM は per-user shared（175 chat sandbox が共存）
+
+`/sessions/` 配下に **175 dir**：
+- Cowork codename 形式（`adoring-admiring-albattani`, `bold-epic-hamilton`, `modest-intelligent-lamport`, 等）
+- **CLI session 形式の `cli-<hex>` も多数**（`cli-00f8f26c`, `cli-055cc48f`, ...） — CLI claude session も同じ filesystem に痕跡を残す（新規 finding）
+- 最古は 2026-02-11、最新は 2026-05-22（このセッション）— 約 3 ヶ月分のセッション履歴累積
+
+これは **ユーザ単位で 1 つの cloud VM が長期に shared されている** ことを意味する：
+- 異なる chat で同じ `BASH_VM_HOSTNAME=claude`、同じ /sessions/ namespace
+- chat 毎に user account を作り isolation
+- chat A の bash subprocess は user `modest-intelligent-lamport` として実行
+- chat B の bash subprocess は user `bold-epic-hamilton` として実行
+- カーネル exploit 等が無ければ user account 境界で data isolation
+
+### 新発見：Codename inventory metadata leak
+
+`/sessions/` 自体は `drwxr-xr-x` で world-listable → **任意の plugin が ls /sessions/ で過去の全 codename を取得可能**。
+
+これは：
+- **data leak ではない**（中身は POSIX permission で blocked）
+- ただし **metadata leak**：「このユーザは過去 3 ヶ月で 175 chat / cli session を使った」「最新の他 chat の codename はこれ」がわかる
+- Plugin 作者の threat model にとって：「自 chat 単独」の前提は崩れる、過去 chat の存在は plugin に obs できる
+
+### §2.11 / §2.12 / 新規 security model 改訂提案
+
+```diff
++ Cowork session isolation の v2.1.146-148 実装モデル（実機検証）：
++
++ 1. **ユーザ単位で 1 つの cloud VM が long-lived**（hostname `claude`、/sessions/ namespace 共有）
++ 2. **chat 毎に user account を作って isolation**（user = codename、例：modest-intelligent-lamport）
++ 3. **cross-chat data isolation は POSIX file permission で実装**（他 chat の dir は nobody:nogroup,
++    drwxr-x--- で完全 read-block）
++ 4. **/sessions/ top-level は world-listable** → codename inventory metadata は全 chat から enumerate 可能
++ 5. **CLI session も同じ /sessions/ に痕跡を残す**（cli-<hex> 形式の dir）
++ 6. **resume は同じ VM + 同じ user account + 同じ cwd に戻る**（VM identity 完全保持）
++
++ Plugin 作者向け security takeaway:
++ - cross-chat data 読み取りは Cowork sandbox が確実に block する（強い isolation）
++ - ただし codename リストは leak している（弱い metadata leak）
++ - VM レベルでは shared なので、カーネル exploit 等の vector は user account boundary に依存
++ - 「Cowork は完全な per-chat VM」という素朴な前提は誤り — per-user shared VM + per-chat user isolation
+```
