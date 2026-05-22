@@ -1481,3 +1481,94 @@ probe 16 follow-up で確定した「hook = local Claude Desktop / bash tool = c
 | bundled script の path を skill body 内で `${CLAUDE_SKILL_DIR}` 経由で組み立て | ❌ Windows path に substitute されて cloud VM bash で失敗 | 使うな |
 | `${CLAUDE_PLUGIN_DATA}` への永続化 | ❌ §2.7 で確認、書き込み届かない | session-scope の context injection 経由のみ |
 | `mkdir -p "$VAR"` で fallback dir 作成 | ⚠️ `$VAR` が Windows path だと literal `C:` ゴミ生成 | 必ず `[ -z "$VAR" ] || [[ "$VAR" =~ ^[A-Z]: ]] && return` 等で先ガード |
+
+## probe 18-cowork-data-isolation（Cowork、redesigned）— PASS + 新発見複数
+
+`verifier-cowork-data-isolation.zip` を Cowork に upload + enable。`/verifier:data-readback` を 2 つの独立 chat（A / B）で実行して比較。
+
+### Chat A 観測
+
+```
+HOOK_HOST_ROOT=(empty)
+HOOK_HOST_DATA=(empty)
+HOOK_HOST_REMOTE=(empty)
+HOOK_HOST_HOSTNAME=LAPTOP-BKGB6100
+HOOK_HOST_SESSIONS_DIR_EXISTS=no
+
+BASH_VM_HOSTNAME=claude
+BASH_VM_CWD=/sessions/modest-intelligent-lamport
+BASH_VM_ROOT=(empty)
+BASH_VM_DATA=(empty)
+BASH_VM_REMOTE=(empty)
+BASH_VM_CODENAME=adoring-admiring-albattani  (= ls /sessions | head -1)
+BASH_VM_SUBST_ROOT=C:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/.../rpm/plugin_016wgiSBoyPhGDjfxTrFRJg8
+BASH_VM_SUBST_DATA=C:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/.../local_7f0307bb-d2bc-41ff-a5ae-997bb4a76d52/.claude/plugins/data/verifier-cowork-data-isolation-inline
+```
+
+### Chat B 観測
+
+```
+HOOK_HOST_ROOT=(empty)
+HOOK_HOST_DATA=(empty)
+HOOK_HOST_REMOTE=(empty)
+HOOK_HOST_HOSTNAME=LAPTOP-BKGB6100              ← Chat A と同じ
+HOOK_HOST_SESSIONS_DIR_EXISTS=no                ← Chat A と同じ
+
+BASH_VM_HOSTNAME=claude                          ← Chat A と同じ
+BASH_VM_CWD=/sessions/bold-epic-hamilton         ← Chat A と違う
+BASH_VM_ROOT=(empty)
+BASH_VM_DATA=(empty)
+BASH_VM_REMOTE=(empty)
+BASH_VM_CODENAME=adoring-admiring-albattani     ← Chat A と同じ
+BASH_VM_SUBST_ROOT=...rpm/plugin_016wgiSBoyPhGDjfxTrFRJg8     ← Chat A と同じ
+BASH_VM_SUBST_DATA=...local_014663c6-30e8-4b92-be54-3b4060e8c34e/.claude/plugins/data/verifier-cowork-data-isolation-inline  ← Chat A と違う
+```
+
+### verdict
+
+| 主張 | 判定 |
+|---|---|
+| §2.11 DATA は chat 毎に別 path（cross-chat isolation） | ✅ PASS（local_<uuid> が違う：`7f0307bb-...` vs `014663c6-...`） |
+| §2.11 ROOT は session 跨ぎで同一 | ✅ PASS（`plugin_016wgiSBoyPhGDjfxTrFRJg8` 共通） |
+| §2.11 `CLAUDE_CODE_REMOTE` 空 | ✅ PASS（docs と矛盾するが research の主張維持） |
+| §1.1 plugin-level hook env に `CLAUDE_PLUGIN_ROOT` SET | ❌ **REGRESSION** — Cowork では空（local Claude Desktop で hook が動くが env として渡されていない） |
+| §1.1 plugin-level hook env に `CLAUDE_PLUGIN_DATA` SET | ❌ 同上 |
+
+### 新発見 1: Cowork cloud VM の hostname は literal `claude`
+
+すべての Cowork VM が hostname `claude` を共有している。Plugin 作者向け：
+- bash tool の host を識別するには `hostname` 値が事実上のシグナル（`claude` = Cowork、それ以外 = CLI ホスト）
+- 複数の chat 間で同じ「base image」が起動されている可能性
+
+### 新発見 2: 単一 Cowork VM 上に複数 chat の sandbox dir が共存
+
+- Chat A の CWD: `/sessions/modest-intelligent-lamport`
+- Chat B の CWD: `/sessions/bold-epic-hamilton`
+- 両 chat とも `ls /sessions | head -1` = `adoring-admiring-albattani`（共通）
+
+→ **同じ /sessions/ namespace に複数の chat sandbox が共存している**ことが確定。これは：
+
+- chat A の bash tool subprocess から chat B の sandbox dir (`/sessions/bold-epic-hamilton/`) に**直接 cd / ls できる可能性**（security threat model 上の重要 finding 候補）
+- §2.11 「cross-chat isolation」は **VM レベルではなく path レベルで実装されている**根拠
+- chat の「自分の codename」は CWD で識別され、`/sessions/` 全体は事実上の workspace pool
+
+これは research には記載されていない新仕様。security 上の意味合いは plugin 作者の threat model に直接影響：「Cowork は cloud VM レベルでは chat 間隔離していない」。
+
+### 新発見 3: plugin-level hook env に CLAUDE_PLUGIN_* が伝わらない（regression）
+
+研究 §1.1 表では plugin-level hook に `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` がともに ✅ SET と記録されている。v2.1.146-148 Cowork では **両方とも空**。
+
+`bash -c "echo $CLAUDE_PLUGIN_ROOT"` が空を返したことから、Claude Desktop の plugin-level hook subprocess の env に CLAUDE_PLUGIN_* が exported されなくなった可能性。
+
+ただし `${CLAUDE_PLUGIN_ROOT}` の skill body substitution は機能している（`C:/Users/.../rpm/plugin_<id>` を出力）。つまり Claude Desktop は path 自体を知っているが、hook subprocess env には流していない。
+
+これは新規 finding：**hook command 内で `${CLAUDE_PLUGIN_ROOT}` のような Claude Code 事前置換を使う経路は (top-level でも literal、bash -c では env 経由で空)、どちらも動かない**。Plugin 作者にとっては「hook 内で plugin path を直接参照する手段が事実上消失している」状態。
+
+### §1.1 改訂提案
+
+```diff
+| `CLAUDE_PLUGIN_ROOT` | ✅ 設定 | ✅ 設定 | ❌ 未設定 |
+| `CLAUDE_PLUGIN_DATA` | ✅ 設定 | ❌ 未設定 | ❌ 未設定 |
++ ※ v2.1.146-148 Cowork 観測: plugin-level hook subprocess でも CLAUDE_PLUGIN_ROOT / DATA が UNSET。
++ Skill body の ${VAR} 置換だけは Claude Desktop による事前置換で機能する。
+```
