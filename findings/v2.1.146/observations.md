@@ -1199,3 +1199,49 @@ CLI baseline（probe 01）では `CLAUDE_CODE_ENTRYPOINT=cli` が Bash tool subp
 ```
 
 これは plugin 作者にとって地味に重要 — env で実行環境（CLI vs Cowork）を分岐する手段が **`CLAUDE_CODE_ENTRYPOINT` の有無**で簡易判別できる可能性。Cowork は env で自身を識別するための marker を一切露出していないので、`CLAUDE_CODE_ENTRYPOINT` の有無が事実上の唯一手がかり。
+
+## probe 14-cowork-parser（Cowork）— DOC-ALIGNED（§2.6 部分的緩和）
+
+実行時の codename: 別 Cowork chat（独立 session）。`verifier-cowork-parser-tests.zip`（hooks.json を stdout-only parser test 配列に差し替えた専用 zip）を新規 chat に upload + enable し、最初の prompt で「initial context 内の `PARSER_TEST_*` を全列挙して」と Claude に質問。
+
+### 投入セット vs 観測結果
+
+| # | 投入した hook command | 観測 marker | 研究 §2.6 (v2.1.119) | v2.1.146-148 結果 |
+|---|---|---|---|---|
+| 1 | `echo PARSER_TEST_BARE` (SessionStart) | ✅ | OK | 一致 |
+| 2 | `bash -c "echo PARSER_TEST_DQ"` | ✅ | OK | 一致 |
+| 3a | `bash -c "echo PARSER_TEST_SEMI; echo PARSER_TEST_SEMI_X"` → SEMI | ✅ | OK | 一致 |
+| 3b | 同上 → SEMI_X | ✅ | OK | 一致 |
+| 4 | `bash -c "echo PARSER_TEST_PIPE \| cat"` | ✅ | OK | 一致 |
+| 5 | `bash -c "x=foo; echo PARSER_TEST_VAR_$x"` | ✅（`VAR_` のみ） | OK | 一致（`$x` は外側 `/bin/sh` で空展開、CLI でも同様 — §1.3 既知挙動） |
+| 6 | `bash -c "true && echo PARSER_TEST_AND"` | ✅ | **❌ outer parser 分断** | **❗ 不一致（DOC-ALIGNED）** |
+| 7 | `bash -c "false \|\| echo PARSER_TEST_OR"` | ✅ | **❌ outer parser 分断** | **❗ 不一致（DOC-ALIGNED）** |
+| 8 | `printf PARSER_TEST_PRINTF\n` | ❌ | ❌（whitelist 外） | 一致 |
+| UPS-1 | `echo PARSER_TEST_UPS_BARE` (UserPromptSubmit) | ✅ | ✅ context 注入 | 一致 |
+| UPS-2 | `bash -c "echo PARSER_TEST_UPS_DQ"` (UserPromptSubmit) | ✅ | ✅ context 注入 | 一致 |
+
+### 結論：v2.1.146-148 で Cowork hook command parser が部分的に緩和
+
+研究 §2.6（v2.1.119 観測）では `bash -c "true && echo ..."` `bash -c "false || echo ..."` は outer parser で**分断され実行されない**とされていた。v2.1.146-148 ではこの 2 構文が**正常に実行されるようになっている**。Plugin 作者にとって以前の落とし穴の 1 つが解消されたことになる。
+
+ただし whitelist 自体は依然存在：`printf` builtin は echo/bash 以外なので reject された（§2.6 の主旨は維持）。
+
+### §2.6 改訂提案
+
+```diff
+- AND (`bash -c "true && echo ..."`)             | ✅ | ❌ outer parser 分断 |
+- OR  (`bash -c "false || echo ..."`)            | ✅ | ❌ outer parser 分断 |
++ AND (`bash -c "true && echo ..."`)             | ✅ | ✅ v2.1.146-148 で実行成功（v2.1.119 比で緩和）|
++ OR  (`bash -c "false || echo ..."`)            | ✅ | ✅ v2.1.146-148 で実行成功（v2.1.119 比で緩和）|
+  printf / cat / sh -c                            | ✅ | ❌ whitelist 外（維持）|
+```
+
+### 副次確認: UserPromptSubmit hook の stdout 注入
+
+probe 14 で `UserPromptSubmit` 配列に 2 entry 仕込んだところ、両方とも Claude の context に注入された（最初のプロンプト時点で Claude が UPS marker を認識）。これは §2.5 row「`UserPromptSubmit` (inline echo) → Cowork ✅ context injection」を v2.1.146-148 でも維持していることの再確認。
+
+### Cowork hook parser のテスト戦略（将来の plugin 作者向け）
+
+- `&&` `||` が動くようになったので bash -c 内で複数コマンド連結のパターンが書きやすくなった
+- ただし `printf` `cat` `sh -c` 等 echo/bash 以外の builtin / 外部コマンドは依然 outer parser で reject される
+- 配布前に **Cowork 実機で hooks の echo 出力を Claude 経由で確認する** のが事実上唯一の検証手段（CLI の `claude plugin validate` では検知不能）
