@@ -1280,3 +1280,62 @@ Canary file MISSING from /tmp — hook file writes did NOT reach sandbox
 - Cowork で `${CLAUDE_PLUGIN_DATA}` への永続化に依存する設計は機能しない（read 不可）
 - hook で state を持ちたい場合は **stdout 経由で additionalContext として model に injection** する以外の手段が無い（つまり「持続的な state」は実現不能、毎回 hook が echo で context に乗せ直す形しか取れない）
 - bash sandbox から `ls` が `No such file or directory` を返すので、**「書いてはいるが reader が見えない」のではなく「書込側か reader 側のどちらかで失敗している」と plugin 開発者には認知される**（silent ではない、診断はしやすい）
+
+## probe 16-cowork-path-forms（Cowork）— PARTIAL / 研究 §2.8 と §1.2 に重大な乖離
+
+probe 16 (skill 内 frontmatter 形式 + verifier-cowork-path-forms.zip 専用観測 zip) を別々の Cowork chat で実行。BODY_SUBST は SKILL.md 内 `${VAR}` 置換、HOOK_SUBST / HOOK_ENV は専用 zip の SessionStart / UserPromptSubmit hook stdout 経由で取得。
+
+### 観測サマリ
+
+| context | 観測値 | 研究 §2.8 (v2.1.119) 期待 | 判定 |
+|---|---|---|---|
+| BODY_SUBST_ROOT | `C:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/<sess-uuid>/<inner-uuid>/rpm/plugin_<id>` | Windows + forward slash | ✅ 一致 |
+| BODY_SUBST_DATA | `C:/Users/knaga/.../local_<sess-uuid>/.claude/plugins/data/verifier-<plugin-name>-inline` | 同上 | ✅ 一致 |
+| BODY_ENV (Bash tool subprocess) | UNSET | UNSET | ✅ §1.1 一致 |
+| HOOK_SUBST_ROOT (`${CLAUDE_PLUGIN_ROOT}` in hook command) | **literal `${CLAUDE_PLUGIN_ROOT}`** | MSYS 形式 `/c/Users/...` | ❌ **DIVERGED** |
+| HOOK_SUBST_DATA | **literal `${CLAUDE_PLUGIN_DATA}`** | 同上 | ❌ DIVERGED |
+| HOOK_ENV_ROOT (`$CLAUDE_PLUGIN_ROOT` no braces) | **literal `$CLAUDE_PLUGIN_ROOT`** | VM Linux mount `/sessions/<codename>/mnt/.remote-plugins/plugin_<id>` | ❌ **DIVERGED** |
+| HOOK_ENV_DATA | **literal `$CLAUDE_PLUGIN_DATA`** | 同上 | ❌ DIVERGED |
+| HOOK_START_SUBST_ROOT (SessionStart) | **literal `${CLAUDE_PLUGIN_ROOT}`** | substituted | ❌ DIVERGED |
+| HOOK_START_ENV_ROOT (SessionStart) | **literal `$CLAUDE_PLUGIN_ROOT`** | expanded | ❌ DIVERGED |
+
+### 結論：研究 §2.8 の「3 種類の path 形式」主張は v2.1.146-148 で 1 形式に縮退
+
+研究 §2.8（v2.1.119）は同じ plugin install を指す `${CLAUDE_PLUGIN_ROOT}` が context ごとに **3 種類の絶対パス**（Windows / MSYS / VM Linux）に化けると主張していたが、v2.1.146-148 では **skill body substitution の 1 形式 (Windows + forward slash) のみ観測可能**。Hook command の path 表現は literal `${VAR}` / `$VAR` のまま context に出てくる。
+
+### 仮説：Cowork の top-level hook command は shell expansion を経由しない
+
+Probe 14 で `bash -c "echo PARSER_TEST_AND"` 等が正しく実行されたことから、hook 自体は動いている。一方で top-level `echo HOOK_SUBST_ROOT=${CLAUDE_PLUGIN_ROOT}` は literal が context に注入される。これを整合的に説明するモデル：
+
+- **Cowork outer parser は top-level `echo` を literal text emission として扱い、shell expansion を経由しない**
+- `${...}` 形式は outer parser でも skip され literal のまま
+- `$...` (no braces) は outer parser が expansion を試みるが、outer env に当該 var が存在しないため empty → literal `$...` が残る（実装によっては literal が残るのか empty 置換されるのか挙動が異なる可能性）
+- `bash -c "..."` で wrap した場合のみ実際の bash が起動して expansion が動く（probe 14 で確認）
+
+probe 14 の `bash -c "x=foo; echo PARSER_TEST_VAR_$x"` が `PARSER_TEST_VAR_` （foo 抜き）になった理由：outer parser が `$x` を pre-substitute（empty）してから bash に渡したため、bash には `bash -c "x=foo; echo PARSER_TEST_VAR_"` が届き、x=foo は no-op になり `PARSER_TEST_VAR_` が出力される。
+
+### §1.2 / §2.8 改訂提案
+
+```diff
++ v2.1.146-148 で確認：Cowork plugin-level hook command の `${CLAUDE_PLUGIN_ROOT}` 等は
++ Claude Code の事前置換を経由しない（または literal text emission のため expand される機会がない）。
++ 研究 §2.8「3 path forms」主張は v2.1.146-148 で 1 form (BODY_SUBST: Windows + forward slash) のみ。
++ HOOK_SUBST (MSYS form) と HOOK_ENV (VM Linux mount form) は context にどちらも literal `${VAR}` / `$VAR`
++ として現れる。
++
++ Plugin 作者向け実用 takeaway:
++ - Cowork plugin-level hook command で `${CLAUDE_PLUGIN_ROOT}/something/script.sh` のような
++   substitution を仕掛けても literal `${CLAUDE_PLUGIN_ROOT}/something/script.sh` が
++   shell に渡る（path は解決しない → script は起動しない）
++ - Hook command で plugin dir 内の bundled script を起動するには
++   `bash -c "..."` で wrap して shell expansion を bash 内で行うか、
++   skill body での invoke 時 substitution を活用する経路に切り替える必要がある
++ - 「hook と skill body で path 形式が違う」という研究の指摘は依然有効だが、
++   v2.1.146-148 では「hook では path が完全に解決しない」という更に厳しい状態に
++   なっている可能性
+```
+
+### 開放案件
+
+- Cowork outer parser の expansion ルールを直接確認する追加 probe（`bash -c "echo X=${PATH}"` 等で標準 env var を 4 つの構文で参照）— 必要に応じて future work で実施
+- HOOK_SUBST / HOOK_ENV が context に literal で出る件は「output が context に届かず definition だけが additionalContext に embed されている」可能性も否定できない（hook execution mechanism の internals に依存）— 追跡可能だが必須ではない
