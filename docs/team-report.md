@@ -168,7 +168,7 @@ PreToolUse hook (Bash matcher) が再度発火
 |---|:---:|:---:|:---:|
 | `CLAUDE_PLUGIN_ROOT` | ✅ | ✅ | ❌ |
 | `CLAUDE_PLUGIN_DATA` | ✅ | ❌ | ❌ |
-| `CLAUDE_PROJECT_DIR` | ✅ | 未確認 | ❌ |
+| `CLAUDE_PROJECT_DIR` | ✅ | ✅ | ❌ |
 | `CLAUDE_PLUGIN_OPTION_<KEY>` | ✅（機密値含む） | ❌ | ❌ |
 | `CLAUDE_CODE_ENTRYPOINT` 等 `CLAUDE_CODE_*` | ✅ | ✅ | ✅ |
 
