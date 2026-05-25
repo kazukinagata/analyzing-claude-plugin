@@ -249,7 +249,7 @@ Claude Code 本体は hook command や skill body の文字列を実行前に `$
 | `${user_config.KEY}` | ✅ | ❌ literal で `/bin/sh` に渡る → `Bad substitution` エラー | 未検証 |
 | `${CLAUDE_SKILL_DIR}` | ❌ | 未検証 | ✅（SKILL.md の dirname） |
 | `${CLAUDE_SESSION_ID}` | 未検証 | 未検証 | ✅（session UUID） |
-| `${CLAUDE_PROJECT_DIR}` | ✅ | 未検証 | ❌ literal のまま |
+| `${CLAUDE_PROJECT_DIR}` | ✅ | 未検証 | ✅（v2.1.146 で改善、v2.1.119 では literal だった） |
 
 skill frontmatter hook に `${CLAUDE_PLUGIN_DATA}` を書くと、install 時の validator が以下メッセージで reject する：
 
@@ -313,7 +313,7 @@ hooks:
 echo "plugin install path: ${CLAUDE_PLUGIN_ROOT}"
 echo "this skill dir: ${CLAUDE_SKILL_DIR}"
 echo "session id: ${CLAUDE_SESSION_ID}"
-echo "project dir (literal): ${CLAUDE_PROJECT_DIR}"
+echo "project dir: ${CLAUDE_PROJECT_DIR}"
 ​```
 ```
 
@@ -323,13 +323,14 @@ echo "project dir (literal): ${CLAUDE_PROJECT_DIR}"
 echo "plugin install path: /home/user/.claude/plugins/cache/<...>/my-plugin"
 echo "this skill dir: /home/user/.claude/plugins/cache/<...>/my-plugin/skills/my-skill"
 echo "session id: 9307ae27-a40f-44d8-85d9-32838abbd9a1"
-echo "project dir (literal): ${CLAUDE_PROJECT_DIR}"  ← これだけ literal で残る
+echo "project dir: /home/user/my-project"
 ```
+
+なお v2.1.119 までは skill body の `${CLAUDE_PROJECT_DIR}` だけが literal のまま残るという既知の制約があった。v2.1.146 で改善され、上記 4 つすべて置換されるようになった。
 
 ### 実用上の対策
 
 - skill frontmatter で userConfig を参照しない（`Bad substitution` で死ぬ）
-- `${CLAUDE_PROJECT_DIR}` は skill body 内では literal のまま残る。実体を欲しいなら hook 経由で書き出すか、bash で `$(pwd)` 等を使う
 - 置換可否を testing するには「dummy skill を作って各経路で `echo ${変数名}` させて context に出るか目視」が最も確実
 
 ## 1.3 hook の実行シェルは `/bin/sh`（WSL/Ubuntu では dash）
