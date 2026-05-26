@@ -2108,7 +2108,20 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 | **`skill_activated`** | **本付録の主題：skill が起動した** |
 
 `service_name=claude-code-desktop` も `skill_activated` を emit する。  
-**`service_name=cowork` は emit しない**（Cowork の hook は host 側で動く architecture と整合。skill 起動自体は cloud VM 側で起きるが、telemetry exporter が cloud VM 側に居ない）。Cowork 経由の skill 起動を集計したい場合は host 側の `claude-code-desktop` event を見る。
+**`service_name=cowork` も emit する**（v2.1.149 in cloud VM で確認）。3 種類すべての `invocation_trigger` 値（`user-slash` / `claude-proactive` / `nested-skill`）が Cowork でも観測される。
+
+> ※ 初期調査では Cowork に skill_activated 不在と誤判定したが、これは event_name の distinct を limit=1000 のサンプルで取った際、頻度の低い skill_activated が切られて見えなかっただけだった。`|~ "skill_activated"` の line filter で全期間スキャンすると検出できる。Appendix の他のセクション（§B.7、§B.8）もこの訂正後の前提で読むこと。
+
+Cowork 経由の event は **CLI 版とほぼ同じ shape だが、固有のフィールド値**がいくつかある：
+
+| field | CLI 版 (`claude-code`) | Cowork 版 (`cowork`) |
+|---|---|---|
+| `marketplace_name` | 通常 marketplace 名 | **`inline` 固定**（zip upload で inline plugin として扱われる） |
+| `terminal_type` | `Apple_Terminal`, `iTerm`, 等 | **`non-interactive` 固定** |
+| `service_version` | `2.1.150` 等 Claude Code 版 | **`1.8555.x` 等 Claude Desktop 版** |
+| `scope_version` | 同上 | **`2.1.149` 等 Claude Code core 版**（service と別系統） |
+| `workspace_host_paths` | 通常未設定 | 接続フォルダの host path 配列（PII 注意） |
+| `prompt`（user_prompt event） | redacted | **平文で記録**（PII / 機密含む可能性） |
 
 ## B.3 `claude_code.skill_activated` の構造
 
@@ -2261,15 +2274,92 @@ sum by (skill_source) (
 | service_name | skill_activated | hook 系 | tool 系 | api_request | 注記 |
 |---|:---:|:---:|:---:|:---:|---|
 | `claude-code` | ✅ | ✅ | ✅ | ✅ | ターミナル CLI 経由 |
-| `claude-code-desktop` | ✅ | ✅ | ✅ | ✅ | Claude Desktop CLI 経由（`api_error` `api_retries_exhausted` もここのみ） |
-| `cowork` | ❌ | ✅ | ✅ | ✅ | Cowork VM 側、`skill_activated` 未 emit。`compaction` `internal_error` がここのみ |
+| `claude-code-desktop` | ✅ | ✅ | ✅ | ✅ | Claude Desktop CLI 経由（`api_error` `api_retries_exhausted` もここのみ。user_prompt の `prompt` は redact 済） |
+| `cowork` | ✅ | ✅ | ✅ | ✅ | Cowork VM 側。3 種の `invocation_trigger` すべて観測可能。`compaction` `internal_error` がここのみ。user_prompt の `prompt` は **redact なし生平文**で保存される（PII 注意） |
 
-## B.8 caveat と運用上の注意
+## B.8 Cowork での skill 追跡レシピ
+
+Cowork は `service_name=cowork` ストリームに `skill_activated` を吐く。CLI 版とほぼ同等の精度で追跡可能。具体クエリは以下。
+
+### a) 自プラグインの全 activation（両経路 + nested 含む）
+
+```logql
+{service_name="cowork"} |~ "skill_activated"
+  | json | plugin_name="<your-plugin>"
+```
+
+`marketplace_name` での絞り込みは Cowork では `inline` 固定になるので使わない。`plugin_name` を使う。
+
+### b) user-slash 経路のみ（ユーザが `/<plugin>:<skill>` を入力した分）
+
+```logql
+{service_name="cowork"} |~ "skill_activated"
+  | json | invocation_trigger="user-slash" | plugin_name="<your-plugin>"
+```
+
+→ 「ユーザが意識的に呼び出した skill」の集計。チーム文化計測に有用。
+
+### c) claude-proactive 経路のみ（自然言語から Claude が自動発火した分）
+
+```logql
+{service_name="cowork"} |~ "skill_activated"
+  | json | invocation_trigger="claude-proactive" | plugin_name="<your-plugin>"
+```
+
+→ 「skill description が機能して Claude が選んでくれた」割合の計測。description チューニングの効果測定に。
+
+### d) nested chain（別 skill から呼ばれた depth 集計）
+
+```logql
+sum by (prompt_id) (
+  count_over_time(
+    {service_name="cowork"} |~ "skill_activated"
+      | json | plugin_name="<your-plugin>" [1d]
+  )
+)
+```
+
+→ histogram で chain depth 分布。
+
+### e) 補強：tool_decision / tool_result でも同じ skill が見える
+
+`skill_activated` event を取りこぼした場合のフォールバック：
+
+```logql
+{service_name="cowork"} | json | tool_name="Skill" | event_name="tool_result"
+```
+
+`tool_input` フィールドに `{"skill":"<name>"}` が JSON 形式で入っているのでこちらでも skill 名を取れる。
+
+### f) ユーザが実際に入力した slash command 文字列
+
+```logql
+{service_name="cowork"} |~ "user_prompt"
+  | json | prompt=~"^/[a-z].*"
+```
+
+→ `/waggle:planning-tasks ...` のように引数つきの slash 入力の生文字列が見える。dashboard の権限は team-only に絞る（PII 含み得る）。
+
+### g) Cowork 経由 vs CLI 経由の比率
+
+```logql
+sum by (service_name) (
+  count_over_time(
+    {service_name=~"claude-code|claude-code-desktop|cowork"} |~ "skill_activated"
+      | json | plugin_name="<your-plugin>" [7d]
+  )
+)
+```
+
+→ Cowork 利用が増えているか、ターミナル CLI が主流か、Desktop CLI が主流か、を 1 枚で可視化。
+
+## B.9 caveat と運用上の注意
 
 - **PII 含有**：`user_email`、`user_account_id`、`session_id`、プロンプト本文の prompt_id 紐付けがあるので、ダッシュボード公開範囲は team 内に限定する
 - **schema drift**：observed `service_version` が `2.1.137` と `2.1.150` で混在していた。フィールド名・取りうる値はマイナーバージョン間で増える可能性あり。alert は緩めに書く
 - **block された skill は記録されない**：hook で block された skill activation は `skill_activated` event を残さない。block 統計が必要なら `tool_decision` event を見る
-- **Cowork blind spot**：§B.2 の通り Cowork 経由は cloud VM 側で skill が動くが telemetry が無いので、Cowork 利用が増えると `skill_activated` カウントが実態より少なくなる。今後の Anthropic 側対応待ち
+- **Cowork ↔ CLI のフィールド非対称**：§B.2 の表の通り `marketplace_name=inline` / `terminal_type=non-interactive` が Cowork で固定値になる。`marketplace_name` で plugin 由来を判定するクエリを書いていると Cowork 側が拾えないので、`plugin_name`（こちらは Cowork でも実プラグイン名が入る）で絞るのが安全
+- **Cowork の user_prompt が PII を保持**：`prompt` フィールドが redact なしで保存される。slash command の引数や自然言語でのユーザ依頼が生のまま入るので、ダッシュボードの permission は厳しく
 - **telemetry の有効化**：OTel exporter は `CLAUDE_CODE_ENABLE_TELEMETRY=1` および OTLP endpoint 設定（あるいは Anthropic 提供の Grafana Cloud 共有設定）が必要。CLI の `hook_registered` event 群を確認すれば自プラグインの hook が import されたか telemetry で見えるかが分かる
 - **検証手段**：本付録の値は 2026-05-26 時点の Grafana Loki 実機サンプルから抽出。再現は `https://logs-prod-030.grafana.net/loki/api/v1/query_range` に basic auth で接続して `{service_name="claude-code"} |~ "skill_activated"` を投げれば誰でもできる
 
