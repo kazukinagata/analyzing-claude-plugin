@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo EXP_CONTROL=hello_static_no_var" },
+          { "type": "command", "command": "echo EXP_TOP_DOLLAR=$PATH" },
+          { "type": "command", "command": "echo EXP_TOP_BRACE=${PATH}" },
+          { "type": "command", "command": "bash -c 'echo EXP_BASH_DOLLAR=$PATH'" },
+          { "type": "command", "command": "[[ -d /tmp ]] && echo EXP_BRACKET_TRUE || echo EXP_BRACKET_FALSE" }
+        ]
+      }
+    ]
+  }
+}

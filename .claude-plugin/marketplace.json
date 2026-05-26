@@ -37,6 +37,11 @@
       "name": "cowork-block-probe",
       "source": "./cowork-block-probe",
       "description": "Skill-to-skill PreToolUse:Skill block test for CLI vs Cowork"
+    },
+    {
+      "name": "cowork-expansion-probe",
+      "source": "./cowork-expansion-probe",
+      "description": "top-level vs bash -c shell expansion test for CLI vs Cowork"
     }
   ]
 }

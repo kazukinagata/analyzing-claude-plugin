@@ -1,0 +1,6 @@
+{
+  "name": "cowork-expansion-probe",
+  "version": "0.1.0",
+  "description": "Tests top-level vs bash -c shell expansion and bash syntax evaluation in plugin-level SessionStart hook commands, to compare CLI vs Cowork.",
+  "author": { "name": "kazukinagata" }
+}
