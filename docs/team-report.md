@@ -246,10 +246,26 @@ Claude Code 本体は hook command や skill body の文字列を実行前に `$
 |---|:---:|:---:|:---:|
 | `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ✅ |
 | `${CLAUDE_PLUGIN_DATA}` | ✅ | ❌ **validator block** | ✅ |
-| `${user_config.KEY}` | ✅ | ❌ literal で `/bin/sh` に渡る → `Bad substitution` エラー | 未検証 |
-| `${CLAUDE_SKILL_DIR}` | ❌ | 未検証 | ✅（SKILL.md の dirname） |
-| `${CLAUDE_SESSION_ID}` | 未検証 | 未検証 | ✅（session UUID） |
-| `${CLAUDE_PROJECT_DIR}` | ✅ | 未検証 | ✅（v2.1.146 で改善、v2.1.119 では literal だった） |
+| `${user_config.KEY}` | ✅（値 set 時。unset 時は hook entry 自体が silent skip） | ❌ literal で `/bin/sh` に渡る → `Bad substitution` エラー | ✅（値 set 時。unset 時は literal） |
+| `${CLAUDE_SKILL_DIR}` | ❌ literal | ❌ literal | ✅（SKILL.md の dirname） |
+| `${CLAUDE_SESSION_ID}` | ❌ literal | ❌ literal | ✅（session UUID） |
+| `${CLAUDE_PROJECT_DIR}` | ✅ | ❌ literal | ✅ |
+
+検証根拠：probe 22 (`verifier/skills/22-substitution-frontmatter/`)。single-quote isolation で shell expansion を抑止し、Claude Code 事前置換のみを観測したもの。生 log は `findings/v2.1.150/probe-22/subst.log`。
+
+### tier 別 allowlist のまとめ
+
+事前置換は **tier ごとに別 allowlist** で運用されている。狭い順：
+
+| tier | 置換される var |
+|---|---|
+| **skill frontmatter hook** | `PLUGIN_ROOT` のみ |
+| **plugin-level hook** | `PLUGIN_ROOT`, `PLUGIN_DATA`, `PROJECT_DIR`, `user_config.KEY` |
+| **skill body markdown** | `PLUGIN_ROOT`, `PLUGIN_DATA`, `SKILL_DIR`, `SESSION_ID`, `PROJECT_DIR`, `user_config.KEY` |
+
+実用上の含意：
+- 「全 tier で動く plugin」を作るときの最大公約数は `${CLAUDE_PLUGIN_ROOT}` のみ
+- session ID や skill dir を hook 側に渡したい場合は、`${CLAUDE_PLUGIN_ROOT}/hooks/script.sh` 経由で wrapper script を起動し、その中で env var 経由で `$CLAUDE_SESSION_ID` 等を読む（env propagation は §1.1 マトリクス通り）
 
 skill frontmatter hook に `${CLAUDE_PLUGIN_DATA}` を書くと、install 時の validator が以下メッセージで reject する：
 
@@ -257,6 +273,26 @@ skill frontmatter hook に `${CLAUDE_PLUGIN_DATA}` を書くと、install 時の
 Hook command references ${CLAUDE_PLUGIN_DATA} but only ${CLAUDE_PLUGIN_ROOT}
 is available for skill hooks (${CLAUDE_PLUGIN_DATA} is plugin-only).
 ```
+
+`${CLAUDE_SKILL_DIR}` `${CLAUDE_SESSION_ID}` `${CLAUDE_PROJECT_DIR}` は validator 通過するが、ランタイムで literal `${...}` のまま `/bin/sh` に渡って single-quote 内なら無害、double-quote / 裸記述だと `/bin/sh` の Bad substitution エラーになる。
+
+### userConfig の保存形式に関する注意
+
+UI (`/plugin configure verifier@verifier-mp`) が書き込む `settings.json` の構造は v2.1.150 で以下のように **`options` 入れ子**：
+
+```json
+{
+  "pluginConfigs": {
+    "verifier@verifier-mp": {
+      "options": {
+        "hello_message": "hello-from-probe-22"
+      }
+    }
+  }
+}
+```
+
+研究 v2.1.119 では入れ子なし（`pluginConfigs.<id>.<key>` 直下）に書いていたが、UI が `options` を挟む形式に統一されている。手動で settings.json を書く場合はこの構造に合わせる。
 
 ### 実装例
 
@@ -1007,8 +1043,10 @@ cat /tmp/api-result.txt
 # skills/use-api-bad/SKILL.md
 
 ​```bash
-# これは動かない：${user_config.api_secret} は skill body では置換されない
-# 仮に置換されたとしても、Bash tool の env には CLAUDE_PLUGIN_OPTION_API_SECRET が来ない
+# 動くが避けるべき：${user_config.api_secret} は skill body でも事前置換される (probe 22)。
+# つまり Claude の context / transcript に平文の secret が書かれて永続化される。
+# sensitive: true の意味（保存先を分ける）を実質無効化するので、機密値は plugin-level
+# hook に閉じ込めるのが正しい。
 curl -H "Authorization: Bearer ${user_config.api_secret}" https://api.example.com/data
 ​```
 ```

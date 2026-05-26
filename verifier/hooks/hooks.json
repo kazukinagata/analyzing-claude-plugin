@@ -7,7 +7,10 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/log.sh\" session-start" },
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/parallel-a.sh\"" },
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/parallel-b.sh\"" },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/parallel-c.sh\"" }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/parallel-c.sh\"" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/subst-probe.sh\" plugin SESSION_ID '${CLAUDE_SESSION_ID}'" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/subst-probe.sh\" plugin SKILL_DIR '${CLAUDE_SKILL_DIR}'" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/subst-probe.sh\" plugin USER_CONFIG '${user_config.hello_message}'" }
         ]
       }
     ],
