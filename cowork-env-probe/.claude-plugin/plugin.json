@@ -1,0 +1,13 @@
+{
+  "name": "cowork-env-probe",
+  "version": "0.1.0",
+  "description": "Dumps CLAUDE_PLUGIN env vars in plugin-level hook, skill frontmatter hook, and skill body to re-verify Cowork env propagation. Output goes to stdout so it surfaces in the chat.",
+  "author": { "name": "kazukinagata" },
+  "userConfig": {
+    "hello_message": {
+      "type": "string",
+      "title": "Hello message",
+      "description": "Non-sensitive probe value stored in settings.json"
+    }
+  }
+}

@@ -1214,6 +1214,28 @@ HOOK_HOST_SESSIONS_DIR_EXISTS=no
 
 すべて空。`CLAUDE_PLUGIN_ROOT` `CLAUDE_PLUGIN_DATA` `CLAUDE_CODE_REMOTE` が hook subprocess env に渡されていない。
 
+### 再検証（2026-05-27, `cowork-env-probe`）
+
+専用の最小 probe (`cowork-env-probe/`) を新規に作り、`bash -c` で `echo "...$CLAUDE_PLUGIN_ROOT..."` を出す plugin-level SessionStart hook で再観測した。結果は同一：
+
+```
+[PLUGIN-HOOK SessionStart] ROOT=[] DATA=[] PROJECT=[] OPT_HELLO=[] ENTRY=[] HOST=[LAPTOP-BKGB6100]
+```
+
+CLI で同 probe を動かした対照（baseline）：
+
+```
+[PLUGIN-HOOK SessionStart] ROOT=[/.../cowork-env-probe] DATA=[/.../plugins/data/cowork-env-probe-...] PROJECT=[/.../analyzing-claude-plugin] OPT_HELLO=[hello-from-CLI-baseline] ENTRY=[cli] HOST=[LAPTOP-BKGB6100]
+```
+
+→ CLI ではフル env + userConfig 値が来るが、Cowork plugin-level hook では全て空。`OPT_HELLO`（userConfig）も Cowork plugin-level hook には来ない。同一 probe を両環境で動かしているので、これは probe の不備ではなく Cowork 固有の挙動差で確定。
+
+### plugin-level PreToolUse / skill frontmatter hook が Cowork で surface しない（2026-05-27 新観測）
+
+同 probe で plugin-level PreToolUse hook、skill frontmatter hook（SessionStart matcher / PreToolUse matcher の両方）を仕込んだが、**Cowork ではいずれの出力も context に surface しなかった**（session resume で SessionStart を再発火させても frontmatter hook は出ない）。一方 CLI では同 probe の frontmatter PreToolUse hook が `ROOT=実パス DATA=空 PROJECT=実パス` で正常発火（§1.1 の「frontmatter hook は ROOT/PROJECT は来るが DATA は来ない」とも一致）。
+
+つまり Cowork で stdout が context に surface する hook は **plugin-level SessionStart だけ**で、plugin-level PreToolUse / skill frontmatter hook（event 種別を問わず）は出てこない。詳細は §2.9・§2.10 を参照。skill frontmatter hook 経由で env を観測する手段が Cowork には無いため、「frontmatter hook で env が消える」という言い方より「frontmatter hook がそもそも Cowork で発火 / surface しない」と捉える方が観測に忠実。
+
 ### CLI と Cowork を分岐する方法
 
 env 経由が死んでいるので、別の手で判定する：
@@ -1656,8 +1678,11 @@ echo "I received: STATE_MARKER=hello-from-hook"
 
 CLI では「一度 invoke した skill の frontmatter hook は `claude` プロセス終了まで生存」だった。Cowork では：
 
-- skill frontmatter hook は **1 プロンプト内のみ有効**（VM suspend/resume で reset される）
-- 同一 chat 内で window を非アクティブにして 3 分以上放置 → 戻ると skill を再 invoke するまで frontmatter hook 不発
+- skill frontmatter hook は **そもそも発火 / surface しない**（2026-05-27 `cowork-env-probe` で再検証）
+- SessionStart matcher / PreToolUse matcher のどちらで仕掛けても、invoke 直後の同一プロンプトでも、session resume 後でも、frontmatter hook の出力は context に出てこない
+- 対照的に CLI では同一 probe の frontmatter PreToolUse hook が body bash 実行時に正常発火する（§2.1 の再検証参照）
+
+> ※ 以前は「1 プロンプト内のみ有効、VM suspend/resume で reset」と記述していたが、2026-05-27 の `cowork-env-probe` 再検証では invoke した同じプロンプトの body bash 実行時ですら frontmatter hook が発火しなかった。「1 プロンプト内は有効」という以前の見立ては Cowork では成立せず、より強く「frontmatter hook は Cowork で機能しない」が正しい。
 
 ### 実装例
 

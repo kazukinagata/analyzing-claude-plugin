@@ -25,6 +25,11 @@
       "name": "verifier-violator-uppercase-name",
       "source": "./verifier-violator-uppercase-name",
       "description": "Isolated kebab-case violator for probe 20"
+    },
+    {
+      "name": "cowork-env-probe",
+      "source": "./cowork-env-probe",
+      "description": "Minimal env-propagation probe (plugin-level / frontmatter / body) for CLI vs Cowork comparison"
     }
   ]
 }

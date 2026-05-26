@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "bash -c 'echo \"[PLUGIN-HOOK SessionStart] ROOT=[$CLAUDE_PLUGIN_ROOT] DATA=[$CLAUDE_PLUGIN_DATA] PROJECT=[$CLAUDE_PROJECT_DIR] OPT_HELLO=[$CLAUDE_PLUGIN_OPTION_HELLO_MESSAGE] ENTRY=[$CLAUDE_CODE_ENTRYPOINT] HOST=[$(hostname)]\"'" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__workspace__bash",
+        "hooks": [
+          { "type": "command", "command": "bash -c 'echo \"[PLUGIN-HOOK PreToolUse] ROOT=[$CLAUDE_PLUGIN_ROOT] DATA=[$CLAUDE_PLUGIN_DATA] PROJECT=[$CLAUDE_PROJECT_DIR] HOST=[$(hostname)]\"'" }
+        ]
+      }
+    ]
+  }
+}
