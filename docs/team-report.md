@@ -2321,15 +2321,23 @@ sum by (prompt_id) (
 
 → histogram で chain depth 分布。
 
-### e) 補強：tool_decision / tool_result でも同じ skill が見える
+### e) tool_decision / tool_result の `tool_name=Skill` は claude-proactive と nested-skill のみ
 
-`skill_activated` event を取りこぼした場合のフォールバック：
+§1.9 で確認した通り、**slash 経由は Skill tool を経由しない**。Loki でも実機確認済（同一 prompt_id 内の event 数）：
 
-```logql
-{service_name="cowork"} | json | tool_name="Skill" | event_name="tool_result"
-```
+| 経路 | tool_name=Skill event 数 |
+|---|:---:|
+| user-slash | **0** |
+| claude-proactive | 2（decision + result） |
+| nested-skill | 2 × chain 段数 |
 
-`tool_input` フィールドに `{"skill":"<name>"}` が JSON 形式で入っているのでこちらでも skill 名を取れる。
+つまり `tool_decision` / `tool_result` の `tool_name=Skill` を skill_activated の **フォールバックとして使うのは誤り**（slash 経由が抜ける）。次の用途には有用：
+
+- **skill 実行の latency 計測**：`tool_decision` (start) → `tool_result` (end) の時間差。skill_activated event 単独では持っていない情報
+- **skill 起動の accept/reject 判定**：`tool_decision.decision` に `accept` / `reject` 等が入る
+- **claude-proactive / nested-skill 限定の精緻なメタデータ**：`tool_input` には `{"skill":"<name>"}`、`tool_parameters` には `{"skill_name":"<name>"}` が入る
+
+「skill 起動回数を全経路で集計したい」用途では **skill_activated を使う**（user-slash も含めて全経路カバー）。
 
 ### f) ユーザが実際に入力した slash command 文字列
 
