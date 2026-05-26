@@ -41,7 +41,8 @@ out_dir="$proj/findings/$ver/probe-22"
 mkdir -p "$out_dir"
 
 # body tier — single-quote isolation
-echo '[BODY] USER_CONFIG=${user_config.hello_message}' >> "$out_dir/subst.log"
+echo '[BODY] USER_CONFIG_HELLO=${user_config.hello_message}' >> "$out_dir/subst.log"
+echo '[BODY] USER_CONFIG_API=${user_config.api_secret}' >> "$out_dir/subst.log"
 echo '[BODY] SESSION_ID=${CLAUDE_SESSION_ID}' >> "$out_dir/subst.log"
 echo '[BODY] PROJECT_DIR=${CLAUDE_PROJECT_DIR}' >> "$out_dir/subst.log"
 echo '[BODY] SKILL_DIR=${CLAUDE_SKILL_DIR}' >> "$out_dir/subst.log"

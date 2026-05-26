@@ -246,7 +246,7 @@ Claude Code 本体は hook command や skill body の文字列を実行前に `$
 |---|:---:|:---:|:---:|
 | `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ✅ |
 | `${CLAUDE_PLUGIN_DATA}` | ✅ | ❌ **validator block** | ✅ |
-| `${user_config.KEY}` | ✅（値 set 時。unset 時は hook entry 自体が silent skip） | ❌ literal で `/bin/sh` に渡る → `Bad substitution` エラー | ✅（値 set 時。unset 時は literal） |
+| `${user_config.KEY}` | ✅ 非機密値は実値（unset 時は hook entry が silent skip）／機密値は plain 平文で実値 | ❌ literal で `/bin/sh` に渡る → `Bad substitution` エラー | ✅ 非機密値は実値（unset 時は literal）／❌ 機密値は `[sensitive option 'KEY' not available in skill content]` という block 文字列に置換される |
 | `${CLAUDE_SKILL_DIR}` | ❌ literal | ❌ literal | ✅（SKILL.md の dirname） |
 | `${CLAUDE_SESSION_ID}` | ❌ literal | ❌ literal | ✅（session UUID） |
 | `${CLAUDE_PROJECT_DIR}` | ✅ | ❌ literal | ✅ |
@@ -495,9 +495,31 @@ CLAUDE_PLUGIN_OPTION_API_SECRET=secret-xyz                ← 平文で渡る！
 
 つまり「hook を作る人は keychain を読むのと同じ信頼境界」と明示。
 
+### ただし skill body には `sensitive: true` 値は届かない（Claude Code 本体が block）
+
+§1.2 マトリクスの通り、`${user_config.<KEY>}` を skill body に書いた場合：
+
+- 非機密 key → 値が平文で置換される（v2.1.150 で probe 22 確認）
+- `sensitive: true` 付き key → **`[sensitive option 'KEY' not available in skill content]` という block 文字列**に置換される（v2.1.150 で probe 22 確認、binary strings にも literal が存在）
+
+つまり Claude Code 本体側で「skill body 経由で機密値が Claude の context / transcript に漏れる」経路を明示的に封じる設計になっている。
+
+```bash
+# SKILL.md 本文に書いたコード
+echo "secret=${user_config.api_secret}"
+```
+
+→ 実行時の Bash tool に渡る文字列：
+
+```bash
+echo "secret=[sensitive option 'api_secret' not available in skill content]"
+```
+
+→ Claude の context にもこの literal 文字列が出るので、機密値は漏れない代わりに **skill のコードが意図通り動かなくなる**。`sensitive: true` key を skill body に書く設計自体が誤り、と読み取れる挙動。
+
 ### 実用上の対策
 
-- 機密値を扱う処理は **plugin-level hook の範囲に閉じ込める**（skill frontmatter / Bash tool には env が伝わらないのでそもそも漏らせない）
+- 機密値を扱う処理は **plugin-level hook の範囲に閉じ込める**（skill body は Claude Code 本体が block、skill frontmatter は env が伝わらない）
 - ログに env をダンプする処理を入れる場合、`CLAUDE_PLUGIN_OPTION_*` を必ずマスクする：
 
 ```sh
@@ -1043,10 +1065,10 @@ cat /tmp/api-result.txt
 # skills/use-api-bad/SKILL.md
 
 ​```bash
-# 動くが避けるべき：${user_config.api_secret} は skill body でも事前置換される (probe 22)。
-# つまり Claude の context / transcript に平文の secret が書かれて永続化される。
-# sensitive: true の意味（保存先を分ける）を実質無効化するので、機密値は plugin-level
-# hook に閉じ込めるのが正しい。
+# 動かない：${user_config.api_secret} は sensitive: true 付きなので、Claude Code 本体が
+# skill body 置換の段階で block する。Bash tool に渡るのは:
+#   curl -H "Authorization: Bearer [sensitive option 'api_secret' not available in skill content]" ...
+# 機密値は漏れない代わりに、curl リクエストは失敗する。設計として誤り。
 curl -H "Authorization: Bearer ${user_config.api_secret}" https://api.example.com/data
 ​```
 ```
