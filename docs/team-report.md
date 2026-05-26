@@ -2069,6 +2069,212 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 
 ---
 
+# 付録 B：OpenTelemetry ベースの skill 発火追跡
+
+§1.9 で「skill が slash 経由か自然言語経由かで発火する hook が違う」点を示した。**hook ベースで両経路をカバーする plugin を書くのは可能だが、可観測性（telemetry / 監査）の用途には Claude Code が emit する OpenTelemetry event を使う方が圧倒的に綺麗**。本付録は v2.1.150 時点の Grafana Loki 実機調査結果に基づく。
+
+## B.1 hook ベース追跡だと何が困るのか
+
+§1.9 の表を「telemetry に使えるか」の観点で読み直すと：
+
+| 観測したい状況 | 自然言語経由 | slash 経由 | nested skill chain |
+|---|:---:|:---:|:---:|
+| `PreToolUse:Skill` で skill 起動を catch | ✅ | ❌ | ✅（子 skill のみ） |
+| `UserPromptExpansion` で slash を catch | ❌ | ✅（CLI のみ） | ❌ |
+| `UserPromptSubmit` で根プロンプトを catch | ✅ | ✅ | ✅（根のみ） |
+
+要点：
+- 単一の hook では全経路を carry できない
+- 両方仕込んでも、Cowork では `UserPromptExpansion` が validator reject される
+- nested-skill chain（skill が別 skill を呼ぶ）の追跡は hook 側では結局困難
+- hook は **plugin-local**。複数 plugin / マシン横断で集計するなら、ログ集約パイプラインを自前で立てる必要あり
+
+## B.2 Claude Code が emit する OTel event 一覧
+
+`service_name=claude-code` の Loki ストリームに 11 種の `event_name` が観測された：
+
+| event_name | 内容 |
+|---|---|
+| `user_prompt` | ユーザがプロンプトを送った |
+| `api_request` | Anthropic API へのリクエスト送信 |
+| `tool_decision` | tool 実行を decide（permission UI 含む） |
+| `tool_result` | tool 結果が戻った |
+| `hook_registered` | hook 登録（skill frontmatter hook の lifecycle 観測可） |
+| `hook_execution_start` / `hook_execution_complete` | hook 実行の begin/end |
+| `mcp_server_connection` | MCP server への接続 |
+| `plugin_loaded` | plugin が読み込まれた |
+| `permission_mode_changed` | `defaultMode` 等の変化 |
+| `subagent_completed` | sub-agent（Agent tool）の完了 |
+| **`skill_activated`** | **本付録の主題：skill が起動した** |
+
+`service_name=claude-code-desktop` も `skill_activated` を emit する。  
+**`service_name=cowork` は emit しない**（Cowork の hook は host 側で動く architecture と整合。skill 起動自体は cloud VM 側で起きるが、telemetry exporter が cloud VM 側に居ない）。Cowork 経由の skill 起動を集計したい場合は host 側の `claude-code-desktop` event を見る。
+
+## B.3 `claude_code.skill_activated` の構造
+
+実観測した属性フィールド：
+
+| field | 例 | 用途 |
+|---|---|---|
+| `event_name` | `skill_activated` 固定 | クエリの軸 |
+| `invocation_trigger` | `user-slash` / `claude-proactive` / `nested-skill` | **§B.4 の経路区別キー** |
+| `skill_name` | `waggle:bootstrap-session` | `<plugin>:<skill>` or `<skill>` |
+| `skill_source` | `plugin` / `builtin` / `bundled` / `projectSettings` / `userSettings` | 出処の分類 |
+| `plugin_name` | `waggle` | plugin 由来時のみ |
+| `marketplace_name` | `waggle` | 同上 |
+| `prompt_id` | UUID | **§B.5 の chain 復元キー** |
+| `session_id` | UUID | chat session |
+| `service_version` | `2.1.150` | バージョン横断分析用 |
+| `user_email` / `user_account_id` | identity | 個人特定可能、PII 注意 |
+| `terminal_type`, `os_type`, `host_arch` | `Apple_Terminal` / `darwin` / `arm64` 等 | env breakdown |
+
+## B.4 `invocation_trigger` の 3 値と対応する起動経路
+
+| 値 | 起動経路 | §1.9 の対応 hook |
+|---|---|---|
+| `user-slash` | ユーザが `/<plugin>:<skill>` を入力 | UserPromptExpansion（CLI のみ） |
+| `claude-proactive` | Claude が自然言語プロンプトから自発的に発火 | PreToolUse:Skill |
+| `nested-skill` | 別 skill が `Skill` tool を呼んで chain した | PreToolUse:Skill（子 skill） |
+
+サンプル：
+
+```jsonc
+// user-slash の例
+{
+  "event_name": "skill_activated",
+  "invocation_trigger": "user-slash",
+  "skill_name": "tech-blog-generator",
+  "skill_source": "projectSettings",
+  "plugin_name": null,             // project-local skill なので plugin 不在
+  "prompt_id": "3e472fd7-…",
+  "session_id": "a219c192-…"
+}
+
+// claude-proactive の例
+{
+  "event_name": "skill_activated",
+  "invocation_trigger": "claude-proactive",
+  "skill_name": "storehero-log",
+  "skill_source": "userSettings",
+  "plugin_name": null,
+  "prompt_id": "6e761fef-…",
+  "session_id": "7c92f381-…"
+}
+
+// nested-skill の例
+{
+  "event_name": "skill_activated",
+  "invocation_trigger": "nested-skill",
+  "skill_name": "waggle-notion:notion-provider",
+  "skill_source": "plugin",
+  "plugin_name": "waggle-notion",
+  "marketplace_name": "waggle",
+  "prompt_id": "8013a35a-…",
+  "session_id": "dfe0517c-…"
+}
+```
+
+## B.5 `prompt_id` による skill chain 復元
+
+**同じユーザプロンプトから派生した全 skill activation は同じ `prompt_id` を共有する**。これにより hook では複雑だった「chain 全体の起点はどの skill だったか」が単純な GROUP BY 1 本で復元できる。
+
+観測例（実データから抽出、prompt_id = `8013a35a-...`）：
+
+```
+2026-05-26T00:27:51.194Z  skill_activated  nested-skill  waggle:managing-tasks
+2026-05-26T00:27:54.602Z  skill_activated  nested-skill  waggle:bootstrap-session
+2026-05-26T00:27:56.727Z  skill_activated  nested-skill  waggle:detecting-provider
+2026-05-26T00:28:07.476Z  skill_activated  nested-skill  waggle-notion:notion-provider
+```
+
+→ 同一ユーザプロンプトから 4 つの skill が連鎖発火した chain と分かる。ただし 4 つすべて `nested-skill` なのは、最初の起動経路（user-slash or claude-proactive）の event が別の event_name 下にあるか、または検索 limit でこぼれた可能性あり。**chain root を特定したい場合は、同 `prompt_id` で `user_prompt` event を別途検索**：
+
+```logql
+{service_name="claude-code"} |~ "user_prompt"
+  | json | prompt_id="8013a35a-..."
+```
+
+## B.6 実用的な LogQL クエリ集
+
+### a) 自プラグインの skill activation 集計
+
+```logql
+{service_name=~"claude-code(-desktop)?"} |~ "skill_activated"
+  | json | plugin_name="waggle"
+```
+
+→ panel: skill_name でグループ化して time-series stacked area。
+
+### b) user-slash vs claude-proactive の比率
+
+```logql
+sum by (invocation_trigger) (
+  count_over_time(
+    {service_name=~"claude-code(-desktop)?"} |~ "skill_activated"
+      | json | plugin_name="waggle" [1h]
+  )
+)
+```
+
+→ panel: pie chart。「自然発火がほとんど」「slash で叩く文化が定着」等の運用文化が見える。
+
+### c) skill 起動失敗（hook で block された）の検知
+
+`skill_activated` は **block されなかった**起動のみ emit される（hook が PreToolUse:Skill で decision: block を返すと event が出ない）。block 状況を見たい場合は `tool_decision` event 経路：
+
+```logql
+{service_name="claude-code"} |~ "tool_decision"
+  | json
+  | tool_name="Skill"
+  | decision="block"
+```
+
+### d) chain depth の集計
+
+同一 `prompt_id` 内の `skill_activated` 件数 = chain length。
+
+```logql
+sum by (prompt_id) (
+  count_over_time(
+    {service_name="claude-code"} |~ "skill_activated"
+      | json | plugin_name="waggle" [1d]
+  )
+)
+```
+
+→ histogram にすれば「ほとんど chain 1」「ときどき 4 段 nest」等の分布が見える。
+
+### e) skill_source 分布
+
+```logql
+sum by (skill_source) (
+  count_over_time(
+    {service_name="claude-code"} |~ "skill_activated" [1d]
+  )
+)
+```
+
+→ `plugin` vs `userSettings` vs `projectSettings` 等の使われ方比率。
+
+## B.7 service_name × event_name 可視性マトリクス
+
+| service_name | skill_activated | hook 系 | tool 系 | api_request | 注記 |
+|---|:---:|:---:|:---:|:---:|---|
+| `claude-code` | ✅ | ✅ | ✅ | ✅ | ターミナル CLI 経由 |
+| `claude-code-desktop` | ✅ | ✅ | ✅ | ✅ | Claude Desktop CLI 経由（`api_error` `api_retries_exhausted` もここのみ） |
+| `cowork` | ❌ | ✅ | ✅ | ✅ | Cowork VM 側、`skill_activated` 未 emit。`compaction` `internal_error` がここのみ |
+
+## B.8 caveat と運用上の注意
+
+- **PII 含有**：`user_email`、`user_account_id`、`session_id`、プロンプト本文の prompt_id 紐付けがあるので、ダッシュボード公開範囲は team 内に限定する
+- **schema drift**：observed `service_version` が `2.1.137` と `2.1.150` で混在していた。フィールド名・取りうる値はマイナーバージョン間で増える可能性あり。alert は緩めに書く
+- **block された skill は記録されない**：hook で block された skill activation は `skill_activated` event を残さない。block 統計が必要なら `tool_decision` event を見る
+- **Cowork blind spot**：§B.2 の通り Cowork 経由は cloud VM 側で skill が動くが telemetry が無いので、Cowork 利用が増えると `skill_activated` カウントが実態より少なくなる。今後の Anthropic 側対応待ち
+- **telemetry の有効化**：OTel exporter は `CLAUDE_CODE_ENABLE_TELEMETRY=1` および OTLP endpoint 設定（あるいは Anthropic 提供の Grafana Cloud 共有設定）が必要。CLI の `hook_registered` event 群を確認すれば自プラグインの hook が import されたか telemetry で見えるかが分かる
+- **検証手段**：本付録の値は 2026-05-26 時点の Grafana Loki 実機サンプルから抽出。再現は `https://logs-prod-030.grafana.net/loki/api/v1/query_range` に basic auth で接続して `{service_name="claude-code"} |~ "skill_activated"` を投げれば誰でもできる
+
+---
+
 # 参考文献
 
 - 検証結果の生データ：`findings/v2.1.146/observations.md`（1300 行超）
@@ -2076,3 +2282,4 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 - 元になった研究記録（v2.1.118-119 時点）：`/home/kazukinagata/projects/sandbox/research.md`
 - 検証プラグイン本体：`verifier/`
 - Cowork 専用検証 zip：`findings/v2.1.148/verifier-cowork-*.zip`
+- OTel 実機観測：Grafana Loki, 2026-05-26 時点
