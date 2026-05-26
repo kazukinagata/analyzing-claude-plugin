@@ -1754,11 +1754,24 @@ Cowork：
 
 matcher を `Bash` / `Skill` / `.*` / `mcp__workspace__bash` の 4 通りすべて試した。JSON `decision: block` でも `exit 2` でも block されず、skill body の `echo TEST_BASH_OK_MARKER` が普通に実行された。
 
+### skill-to-skill block（frontmatter PreToolUse:Skill）も Cowork では効かない（2026-05-27 実測で訂正）
+
+以前は「skill frontmatter の `PreToolUse:Skill` による skill-to-skill block は Cowork でも生存（§1.11 ベースで動く）」と記述していたが、これは CLI 挙動からの**未検証の類推**だった。専用 probe (`cowork-block-probe/`) で実測した結果、**Cowork では frontmatter PreToolUse:Skill の block decision も honor されない**ことが確定した。
+
+probe 構成：guard skill が frontmatter `PreToolUse:Skill` hook で `{"decision":"block","reason":"BLOCKED-BY-GUARD-HOOK"}` を返す → victim skill を自然言語で起動して止まるか観測。
+
+| 環境 | victim 起動経路 | 結果 |
+|---|---|---|
+| CLI | Skill tool（自然言語） | `BLOCKED-BY-GUARD-HOOK` で**ブロック**、victim body 走らず |
+| Cowork | Skill tool（`Launching skill: ...` 出る） | **ブロックされず** `VICTIM-RAN-MARKER ... host=claude` で victim body 実行 |
+
+Cowork では Skill tool 呼び出し自体は起きているのに block が無視される。これは §2.9 の「Cowork で frontmatter hook が発火 / surface しない」とも整合（hook が機能しないので block decision も届かない）。
+
 ### 実用上の含意
 
 - 「危険な bash コマンドを plugin が事前に止める」系の guard は Cowork で動かない
-- skill frontmatter の `PreToolUse:Skill` による skill-to-skill block は Cowork でも生存（§1.11 ベースで動く）
-- ユーザ自身に permission UI で OK / NG を判断させる Cowork の仕組みを信頼する設計に切り替える
+- **skill-to-skill block（frontmatter PreToolUse:Skill）も Cowork では動かない**（2026-05-27 実測。CLI では動く）
+- Cowork では plugin 側の hook による guard は plugin-level / frontmatter ともに信頼できない。ユーザ自身に permission UI で OK / NG を判断させる Cowork の仕組みに委ねる設計へ切り替える
 
 ## 2.11 Bash tool 名は `mcp__workspace__bash`
 

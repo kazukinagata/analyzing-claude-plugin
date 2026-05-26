@@ -1,7 +1,9 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "verifier-mp",
-  "owner": { "name": "kazukinagata" },
+  "owner": {
+    "name": "kazukinagata"
+  },
   "metadata": {
     "description": "Local marketplace for re-verifying Claude Code plugin findings"
   },
@@ -30,6 +32,11 @@
       "name": "cowork-env-probe",
       "source": "./cowork-env-probe",
       "description": "Minimal env-propagation probe (plugin-level / frontmatter / body) for CLI vs Cowork comparison"
+    },
+    {
+      "name": "cowork-block-probe",
+      "source": "./cowork-block-probe",
+      "description": "Skill-to-skill PreToolUse:Skill block test for CLI vs Cowork"
     }
   ]
 }

@@ -1,0 +1,6 @@
+{
+  "name": "cowork-block-probe",
+  "version": "0.1.0",
+  "description": "Tests whether a skill frontmatter PreToolUse:Skill block decision is honored on Cowork vs CLI (skill-to-skill block).",
+  "author": { "name": "kazukinagata" }
+}
