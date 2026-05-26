@@ -32,6 +32,6 @@ echo "=== Write trial: plugin dir (expected FAIL on Cowork) ===" | tee -a "$out_
 
 ## step 2: Cowork で request_cowork_directory tool 試行（あれば）
 
-Claude にお願いしてください：「`/home/kazukinagata` への `request_cowork_directory` を実行して、承認したら `~/canary-21-host.txt` に書き込みテストして」（Cowork 環境でのみ動作）。
+Claude にお願いしてください：「`~` への `request_cowork_directory` を実行して、承認したら `~/canary-21-host.txt` に書き込みテストして」（Cowork 環境でのみ動作）。
 
 完了して exit、`./scripts/assert.sh 21`。

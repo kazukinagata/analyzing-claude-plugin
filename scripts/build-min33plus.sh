@@ -88,9 +88,9 @@ build_03_fm min36-fm-real-no-pwd '{ printf "[03-FM-bashisms %s] BASH_VERSION=[%s
 
 # Copy only the new zips
 NEW_ZIPS=("$OUT_ABS/verifier-min33-fm-brace-only.zip" "$OUT_ABS/verifier-min34-fm-brace-2_to_1.zip" "$OUT_ABS/verifier-min35-fm-brace-redirect.zip" "$OUT_ABS/verifier-min36-fm-real-no-pwd.zip")
-cp "${NEW_ZIPS[@]}" /mnt/c/Users/knaga/OneDrive/Desktop/
+cp "${NEW_ZIPS[@]}" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
 for z in "${NEW_ZIPS[@]}"; do
   ls -la "$z"
 done
 echo "---copied to desktop:---"
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-min3[3-6]*.zip
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-min3[3-6]*.zip

@@ -38,5 +38,5 @@ Z3=$(build_subset cowork-bisect-c-first-no-suspects "${FIRST_NO_SUSPECTS[@]}")
 Z4=$(build_subset cowork-bisect-d-second-no-suspects "${SECOND_NO_SUSPECTS[@]}")
 
 ls -la "$Z3" "$Z4"
-cp "$Z3" "$Z4" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-bisect-C*.zip /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-bisect-D*.zip
+cp "$Z3" "$Z4" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-bisect-C*.zip "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-bisect-D*.zip

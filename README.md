@@ -1,83 +1,109 @@
 # analyzing-claude-plugin
 
-Claude Code プラグイン機構の挙動を **現バージョンで再検証する** ための probe プラグインと runbook。
+Claude Code plugin 機構の挙動を **22 個の probe skill で実機検証**し、公式ドキュメントには書かれていない仕様や、ドキュメントと挙動が矛盾する箇所を洗い出したレポジトリ。
 
-source となる調査記録（`/home/kazukinagata/projects/sandbox/research.md` / `research-summary.md`）は Claude Code **v2.1.118-119** / Claude Desktop **1.3883.0** で 2026-04 に取られたもの。現在は **Claude Code v2.1.143** + 最新 Claude Desktop。25 バージョン進んでいるため、どの finding がまだ生きていてどれが崩れているかを確認する。
+検証対象：
+- **Claude Code CLI**: v2.1.143 → v2.1.146 → v2.1.150
+- **Claude Desktop / Cowork**: v2.1.146-149（cloud VM 側）
 
-## ゴール
+## 何が分かるか
 
-- research.md の全 finding（§1.1〜§2.13）を 22 個の probe skill でカバー
-- **手動 runbook ベース**：人間が `claude` 対話セッションを起動し、`MASTER-RUNBOOK.md` に沿って probe を順に叩く。Claude を `--print` で勝手に動かす自動化は採用しない
+`docs/team-report.md` に **約 2,400 行の落とし穴まとめ**があります。主なトピック：
+
+- **環境変数の伝播マトリクス**：`CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` / `CLAUDE_PROJECT_DIR` 等が plugin-level hook / skill frontmatter hook / Bash tool subprocess の 3 階層で非対称に渡される
+- **`${VAR}` 事前置換の tier 別 allowlist**：skill body は最も広い、skill frontmatter は `${CLAUDE_PLUGIN_ROOT}` のみ
+- **`sensitive: true` userConfig の挙動**：plugin-level hook には平文で env 渡し、skill body は Claude Code 本体が block 文字列に置換して leak 防止
+- **slash 起動と自然言語起動で発火する hook が違う**：`PreToolUse:Skill` は自然言語のみ、`UserPromptExpansion` は slash のみ
+- **OTel `claude_code.skill_activated` event** による 3 経路 (`user-slash` / `claude-proactive` / `nested-skill`) の追跡方法
+- **Cowork 固有の罠**：host-adjacent VM + virtio-fs architecture、plugin-level PreToolUse block の無効化、validator が CLI より厳しい等
+
+## 構成
+
+```
+verifier/                 # 22 probe skill を持つ検証用 plugin 本体
+verifier-violator/        # validator block を意図的にトリガーする違反 plugin
+docs/
+  team-report.md          # 全 finding をまとめた本文（一番読むべき）
+  check-matrix.md         # probe 別 verdict 表
+  cowork-runbook.md       # Cowork 実機検証手順
+  methodology.md          # 検証手法
+scripts/                  # log 解析 / assert / Cowork zip 生成
+findings/                 # 実行結果（per-version observations.md / report.md のみ git 管理）
+MASTER-RUNBOOK.md         # 22 probe を順に回すための手動手順
+LICENSE
+```
+
+## 検証方針
+
+- **手動 runbook ベース**：`claude --print` 等の自動化は採用しない。人間が `claude` 対話セッションを起動し、`/verifier:NN-...` を順に叩く
 - 自動化するのは log の集約・解析・判定（`scripts/assert.sh`）のみ
-- 結果は `findings/v2.1.143/report.md` に verdict 6+1 種（PASS / FAIL / DOC-ALIGNED / PARTIAL / UNKNOWN / CANARY-FAILED / MANUAL-OK）で残す
+- グローバル `~/.claude/` を汚さないよう `CLAUDE_CONFIG_DIR=$(pwd)/findings/claude-home/` で project-local に閉じ込める
+- 結果は `findings/v<version>/report.md` に verdict 6+1 種（PASS / FAIL / DOC-ALIGNED / PARTIAL / UNKNOWN / CANARY-FAILED / MANUAL-OK）で残す
 
-## グローバル環境を汚さない方針
+## 再現手順
 
-すべての script は `CLAUDE_CONFIG_DIR=$(pwd)/findings/claude-home/` を export して claude コマンドを呼ぶ。これでプラグイン install 先、settings.json、installed_plugins.json などが project-local に閉じる。
-
-**完全隔離は保証されない**：以下は CLAUDE_CONFIG_DIR の制御外で `~/.claude/` に書かれる可能性がある：
-- `~/.claude/.credentials.json`（OS keychain fallback）
-- `~/.claude/projects/<hash>/`（session 履歴）
-- `~/.claude/file-history/`
-- OS keychain（macOS Keychain / Linux secret service）
-
-縮退目標：「`~/.claude/plugins/` 配下と `~/.claude/settings.json` の `pluginConfigs` セクションを汚さない」。
-
-## 使い方
-
-### 1. Pre-flight check (step 0)
-
-最初に必ず：
+### 0. Pre-flight check
 
 ```sh
+cd /path/to/analyzing-claude-plugin
+. scripts/_env.sh
 ./scripts/capture-cli-help.sh
 # findings/cli-help/*.log と STEP0-SUMMARY.md を生成
 ```
 
-これで v2.1.143 の `claude plugin --help` 系の構文・schema 互換性・shell 実体を確認する。
+### 1. plugin install
+
+```sh
+. scripts/_env.sh
+bash scripts/install-marketplace.sh
+```
 
 ### 2. canary 確認
 
-観測基盤が生きていることを確認：
+別 terminal で：
 
 ```sh
-# 別 terminal で：
 . scripts/_env.sh
-claude --plugin-dir ./verifier
-# プロンプトで：
+claude
+```
+
+claude prompt 内で：
+
+```
 /verifier:00-canary
-# 完了したら exit
+```
+
+完了後に exit して：
+
+```sh
 ./scripts/assert.sh 00
-# PASS が返れば OK。FAIL/CANARY-FAILED なら後続 probe は走らせる意味なし
+# PASS が返れば観測基盤 OK
 ```
 
 ### 3. 各 probe を MASTER-RUNBOOK 通りに
 
-`MASTER-RUNBOOK.md` を上から下に追って 22 probe を回す。各 probe で `assert.sh NN` を叩いて verdict を確認。
+`MASTER-RUNBOOK.md` を順に追って 22 probe を回す。各 probe で `assert.sh NN` を叩いて verdict を確認。
 
-最後に `./scripts/assert-all.sh` で `findings/v2.1.143/report.md` を生成。
+最後に `./scripts/assert-all.sh` で `findings/v<version>/report.md` を生成。
 
 ### 4. Cowork 実機検証（任意）
 
-`./scripts/package-cowork.sh` で zip を作成、`docs/cowork-runbook.md` の手順で Claude Desktop にアップロード。
-
-## ディレクトリ構成
-
-```
-verifier/                 # 検証用プラグイン
-verifier-violator/        # 02 / 20 用 validator block 試行プラグイン（install 失敗を観察）
-scripts/                  # 自動化はここに（log 解析・sandbox セットアップ）
-docs/                     # check-matrix / cowork-runbook / methodology
-findings/                 # 実行結果（gitignore 対象）
-  claude-home/            # CLAUDE_CONFIG_DIR が指す project-local home
-  cli-help/               # step 0 の出力
-  expected/               # 各 probe の expected 文字列
-  v2.1.143/               # バージョン別の結果
-MASTER-RUNBOOK.md         # 22 probe 分の手動手順
+```sh
+./scripts/package-cowork.sh
 ```
 
-## 参考資料
+で zip を作成、`docs/cowork-runbook.md` の手順で Claude Desktop にアップロード。
 
-- `/home/kazukinagata/projects/sandbox/research.md` — source の調査記録（read-only）
-- `/home/kazukinagata/projects/sandbox/research-summary.md` — 高密度マッピング
-- `/home/kazukinagata/.claude/plans/greedy-snacking-cook.md` — このリポジトリの設計プラン
+## 主要な発見ハイライト
+
+| トピック | 観測 | 関連 § |
+|---|---|---|
+| `${VAR}` 事前置換 allowlist | tier ごとに別 allowlist で運用、skill frontmatter は `${CLAUDE_PLUGIN_ROOT}` のみ | team-report §1.2 |
+| `sensitive: true` の skill body block | Claude Code 本体が `[sensitive option 'KEY' not available in skill content]` に置換して leak を防ぐ | team-report §1.4 |
+| Cowork architecture | host-adjacent VM + virtio-fs。plugin-level hook は host 側、Bash tool は cloud VM 側 | team-report §2.0 |
+| Cowork validator | CLI より厳しい：kebab-case 強制、description 内の `${...}`/`<...>` 拒否、UserPromptExpansion event 拒否 | team-report §2.16 |
+| OTel `skill_activated` | `invocation_trigger=user-slash/claude-proactive/nested-skill` で 3 経路完全区別、Cowork でも emit | team-report Appendix B |
+
+## ライセンス
+
+MIT License — `LICENSE` 参照。

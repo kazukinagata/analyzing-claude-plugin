@@ -14,7 +14,7 @@
 ## CLI 手順
 
 ```sh
-cd /home/kazukinagata/projects/analyzing-claude-plugin
+cd /path/to/analyzing-claude-plugin
 . scripts/_env.sh
 claude --plugin-dir ./verifier
 ```

@@ -503,5 +503,5 @@ build_03_fm min31-fm-verifier-version 'echo "VER=${VERIFIER_VERSION_DIR:-v-unkno
 build_03_fm min32-fm-claude-only 'echo "ROOT=${CLAUDE_PLUGIN_ROOT}"'
 
 ls -la "$out_dir"/verifier-min*.zip
-cp "$out_dir"/verifier-min*.zip /mnt/c/Users/knaga/OneDrive/Desktop/ 2>/dev/null && \
-  ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-min*.zip
+cp "$out_dir"/verifier-min*.zip "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/ 2>/dev/null && \
+  ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-min*.zip

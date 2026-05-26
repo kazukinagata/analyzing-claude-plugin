@@ -42,5 +42,5 @@ build_17_desc cowork-desc-angles 'Description with angle brackets like /sessions
 build_17_desc cowork-desc-both 'Description with both \${CLAUDE_SKILL_DIR} and /sessions/<codename>/ patterns.'
 
 ls -la "$OUT_ABS"/verifier-cowork-desc-*.zip
-cp "$OUT_ABS"/verifier-cowork-desc-*.zip /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-desc-*.zip
+cp "$OUT_ABS"/verifier-cowork-desc-*.zip "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-desc-*.zip

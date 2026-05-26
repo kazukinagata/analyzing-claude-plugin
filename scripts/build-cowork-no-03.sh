@@ -17,5 +17,5 @@ ZIP="$OUT_ABS/verifier-cowork-no-03.zip"
 rm -f "$ZIP"
 ( cd "$tmp" && zip -r "$ZIP" verifier >/dev/null )
 ls -la "$ZIP"
-cp "$ZIP" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls -la /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-no-03.zip
+cp "$ZIP" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls -la "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-no-03.zip

@@ -64,5 +64,5 @@ PY
 build_17_variant cowork-test17-v2-real-body "$tmp/skills17/v2.md"
 
 ls -la "$OUT_ABS"/verifier-cowork-test17-v{1,2}*.zip
-cp "$OUT_ABS"/verifier-cowork-test17-v{1,2}*.zip /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-test17-v*.zip
+cp "$OUT_ABS"/verifier-cowork-test17-v{1,2}*.zip "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-test17-v*.zip

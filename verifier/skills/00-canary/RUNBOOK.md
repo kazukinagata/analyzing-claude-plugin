@@ -13,7 +13,7 @@
 
 ```sh
 # 1. 別 terminal で project root に移動
-cd /home/kazukinagata/projects/analyzing-claude-plugin
+cd /path/to/analyzing-claude-plugin
 
 # 2. 環境変数を export
 . scripts/_env.sh

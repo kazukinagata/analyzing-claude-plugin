@@ -5,7 +5,7 @@ Cowork（Claude Desktop の cloud VM 機能）での実機検証手順。CLI と
 ## 1. zip パッケージング
 
 ```sh
-cd /home/kazukinagata/projects/analyzing-claude-plugin
+cd /path/to/analyzing-claude-plugin
 . scripts/_env.sh
 ./scripts/package-cowork.sh
 ```

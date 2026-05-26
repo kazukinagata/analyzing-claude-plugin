@@ -49,7 +49,7 @@ Claude Code: 2.1.146 (Claude Code) — Cowork client may have advanced to v2.1.1
 The Cowork verification round reorganized our understanding of how Claude Desktop's Cowork environment is constructed. The model that explains every observation we made:
 
 1. **Cowork VM is host-adjacent**, not a remote cloud VM. It runs alongside the user's Windows + WSL stack and shares the host filesystem subset via **virtio-fs FUSE bind mounts**. See probe 21 mount output.
-2. **Plugin-level hooks execute on the user's local Claude Desktop host** (PATH contains `/mnt/c/Users/knaga/...`, `/sessions/` directory does not exist there). Hooks never enter the Cowork VM.
+2. **Plugin-level hooks execute on the user's local Claude Desktop host** (PATH contains `/mnt/c/Users/<user>/...`, `/sessions/` directory does not exist there). Hooks never enter the Cowork VM.
 3. **The Bash tool (surfaced as `mcp__workspace__bash`) executes inside the Cowork VM** (`hostname=claude`, working directory `/sessions/<codename>/`).
 4. **The same Cowork VM is shared across all of one user's chats**. Each chat gets its own Linux user account, and cross-chat isolation is enforced at the POSIX file-permission level — foreign session directories are owned by `nobody:nogroup` and have `drwxr-x---`.
 5. **CLI claude sessions also leave traces in the same `/sessions/` namespace** (the `cli-<hex>` directories), suggesting the same VM serves both Cowork and CLI usage on this user's machine.

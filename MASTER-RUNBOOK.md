@@ -23,7 +23,7 @@
 **ここが PASS しない限り、後続の verdict は信用できない**
 
 ```sh
-cd /home/kazukinagata/projects/analyzing-claude-plugin
+cd /path/to/analyzing-claude-plugin
 . scripts/_env.sh
 claude --plugin-dir ./verifier
 ```

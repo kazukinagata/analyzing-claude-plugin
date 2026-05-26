@@ -49,5 +49,5 @@ NEW_ZIPS+=("$(build_subset_real cowork-count7 00-canary 01-env-propagation 02-su
 NEW_ZIPS+=("$(build_subset_real cowork-count8-add09 00-canary 01-env-propagation 02-substitution-allowlist 04-sensitive-leak 05-userconfig-trigger 06-marketplace-cache 07-skill-body-subst 09-slash-vs-natural)")
 
 ls -la "${NEW_ZIPS[@]}"
-cp "${NEW_ZIPS[@]}" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-test-*.zip
+cp "${NEW_ZIPS[@]}" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-test-*.zip

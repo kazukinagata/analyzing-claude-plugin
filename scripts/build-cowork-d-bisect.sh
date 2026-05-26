@@ -32,5 +32,5 @@ Z6=$(build_subset_real cowork-test-17 17-cowork-bash-mount)
 Z7=$(build_subset_real cowork-test-18 18-cowork-data-isolation)
 
 ls -la "$Z1" "$Z2"
-cp "$Z1" "$Z2" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-d{1,2}*.zip
+cp "$Z1" "$Z2" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-d{1,2}*.zip

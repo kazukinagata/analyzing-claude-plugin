@@ -38,5 +38,5 @@ MD
 
 build_clones cowork-count-22 22
 ls -la "$OUT_ABS/verifier-cowork-count-22.zip"
-cp "$OUT_ABS/verifier-cowork-count-22.zip" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-count-22.zip
+cp "$OUT_ABS/verifier-cowork-count-22.zip" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-count-22.zip

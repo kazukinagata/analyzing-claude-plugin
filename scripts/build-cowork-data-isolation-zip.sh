@@ -92,5 +92,5 @@ MD
 
 ( cd "$tmp/$label" && zip -r "${OUT_ABS}/verifier-$label.zip" "verifier-$label" >/dev/null )
 ls -la "$OUT_ABS/verifier-$label.zip"
-cp "$OUT_ABS/verifier-$label.zip" /mnt/c/Users/knaga/OneDrive/Desktop/
-ls /mnt/c/Users/knaga/OneDrive/Desktop/verifier-cowork-data-isolation.zip
+cp "$OUT_ABS/verifier-$label.zip" "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/
+ls "${COWORK_OUT_DIR:-/tmp/cowork-zips}"/verifier-cowork-data-isolation.zip

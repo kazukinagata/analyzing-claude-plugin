@@ -15,7 +15,7 @@ skill body の `${VAR}` 置換と、skill frontmatter で `${CLAUDE_PLUGIN_DATA}
 ## 手順
 
 ```sh
-cd /home/kazukinagata/projects/analyzing-claude-plugin
+cd /path/to/analyzing-claude-plugin
 . scripts/_env.sh
 ./scripts/install-marketplace.sh   # ← まだ未実行ならここで
 # 別 terminal:
