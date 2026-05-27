@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo PRESUB_CONTROL=static_marker_no_var" },
+          { "type": "command", "command": "echo PRESUB_TOP_BARE=${CLAUDE_PLUGIN_ROOT}" },
+          { "type": "command", "command": "echo 'PRESUB_TOP_SQ=${CLAUDE_PLUGIN_ROOT}'" },
+          { "type": "command", "command": "echo PRESUB_DATA=${CLAUDE_PLUGIN_DATA}" },
+          { "type": "command", "command": "bash -c 'echo PRESUB_BASH_BRACE=${CLAUDE_PLUGIN_ROOT}'" }
+        ]
+      }
+    ]
+  }
+}

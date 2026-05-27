@@ -42,6 +42,11 @@
       "name": "cowork-expansion-probe",
       "source": "./cowork-expansion-probe",
       "description": "top-level vs bash -c shell expansion test for CLI vs Cowork"
+    },
+    {
+      "name": "cowork-presub-probe",
+      "source": "./cowork-presub-probe",
+      "description": "CLAUDE_PLUGIN_ROOT pre-substitution test (top-level vs bash -c) for CLI vs Cowork"
     }
   ]
 }

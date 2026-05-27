@@ -1,0 +1,6 @@
+{
+  "name": "cowork-presub-probe",
+  "version": "0.1.0",
+  "description": "Tests whether Claude Code pre-substitution of CLAUDE_PLUGIN_ROOT runs in plugin-level SessionStart hook commands (top-level, single-quoted, and bash -c wrapped) to compare CLI vs Cowork.",
+  "author": { "name": "kazukinagata" }
+}

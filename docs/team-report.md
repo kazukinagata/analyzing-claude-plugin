@@ -267,6 +267,30 @@ Claude Code 本体は hook command や skill body の文字列を実行前に `$
 - 「全 tier で動く plugin」を作るときの最大公約数は `${CLAUDE_PLUGIN_ROOT}` のみ
 - session ID や skill dir を hook 側に渡したい場合は、`${CLAUDE_PLUGIN_ROOT}/hooks/script.sh` 経由で wrapper script を起動し、その中で env var 経由で `$CLAUDE_SESSION_ID` 等を読む（env propagation は §1.1 マトリクス通り）
 
+### 重要：hook command 列の「✅」は事前置換ではなくシェル展開（2026-05-27, `cowork-presub-probe` で判明）
+
+上の「置換可否マトリクス」は「`${VAR}` が実値に解決されるか」を測ったものだが、**hook command tier（plugin-level / frontmatter）の `${CLAUDE_PLUGIN_*}` の ✅ は、Claude Code 事前置換ではなく `/bin/sh` のシェル展開（env 経由）だった**。両者は別物：
+
+| 経路 | 仕組み | quote 感度 |
+|---|---|---|
+| Claude Code 事前置換 | command 文字列を shell 前に書き換え | **quote 非依存**（single-quote 内でも置換、probe 22 で確認） |
+| シェル展開 | `/bin/sh` が実行時に env から `$VAR` 展開 | **quote 依存**（single-quote で抑止） |
+
+`cowork-presub-probe` で single-quote isolation すると：
+
+- `echo '${CLAUDE_PLUGIN_ROOT}'`（single-quote）→ **CLI でも literal `${CLAUDE_PLUGIN_ROOT}`**。pre-sub が quote 非依存なら single-quote 内でも実値になるはずなので、これは pre-sub ではなく **shell 展開**である証拠。
+- 一方 probe 22 では `'${user_config.hello_message}'`（single-quote）が値に解決されていた。`user_config` は env 変数を持たないので、これは **pre-sub 以外あり得ない**（pre-sub は quote 非依存）。
+
+つまり tier ごとの「真の事前置換 allowlist」と「env シェル展開で解決される var」を分けると：
+
+| tier | 真の事前置換（quote 非依存） | env シェル展開で解決（quote 依存） |
+|---|---|---|
+| plugin-level hook | `${user_config.KEY}` のみ | `${CLAUDE_PLUGIN_ROOT/DATA/PROJECT_DIR}`（env が §1.1 で set されているから） |
+| skill frontmatter hook | （未精査） | `${CLAUDE_PLUGIN_ROOT/PROJECT_DIR}`（env set のもの） |
+| skill body | `PLUGIN_ROOT/PLUGIN_DATA/SKILL_DIR/SESSION_ID/PROJECT_DIR/user_config.KEY` 全部（env は空なのに解決＝quote 非依存の真の pre-sub、probe 22 で確認） | — |
+
+含意：**hook command 中の `${CLAUDE_PLUGIN_ROOT}` は「事前置換対象」ではなく「env シェル展開対象」**。だから §1.1 で env が来ない Cowork の plugin-level hook では解決できない（§2.1 / §2.2）。skill body だけが env 非依存の真の事前置換で、Cowork でも（Windows path だが）解決する（§2.7）。
+
 skill frontmatter hook に `${CLAUDE_PLUGIN_DATA}` を書くと、install 時の validator が以下メッセージで reject する：
 
 ```
@@ -1258,8 +1282,8 @@ fi
 
 ### 実用上の含意
 
-- Cowork で plugin-level hook から plugin install dir を参照したいなら **`${CLAUDE_PLUGIN_ROOT}` 置換**を使う必要あり（env var 経由はもう動かない）
-- ただし後述 2.2 の通り、Cowork では `${VAR}` 置換も top-level command では機能しない。**結局 hook 内で plugin path を取得する手段がほぼ消失している**
+- Cowork で plugin-level hook から plugin install dir を取得する手段は**ほぼ消失している**。`${CLAUDE_PLUGIN_ROOT}` は §1.2 で判明した通り hook command では**事前置換ではなく env シェル展開**で解決されるが、その env が Cowork では空（§2.1）。pre-sub の fallback も無い（hook command の `${CLAUDE_PLUGIN_*}` は元々 pre-sub 対象外）
+- 後述 2.2 の通り top-level の `$` も抑止されるので、`${CLAUDE_PLUGIN_ROOT}` は literal、`bash -c` で wrap しても env 空なので空文字列
 - CLI/Cowork 両対応の plugin は `bash -c` + hostname 判定で動作を分岐する設計が必要
 
 ## 2.2 `${VAR}` 置換と shell expansion（§1.2 / §1.3 の Cowork 版）
@@ -1313,8 +1337,8 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 ```
 
 つまり：
-- top-level: shell process が起動されない → 何も展開されない
-- `bash -c "..."`: 実 bash が起動 → POSIX 通りに展開
+- top-level: `/bin/sh` で実行はされる（echo / `&&` / `[[` は動く）が、`$VAR` 展開だけが抑止される（§2.2 冒頭の訂正参照）
+- `bash -c "..."`: 実 bash が起動 → POSIX 通りに `$VAR` も展開される
 
 ### 実装例：${CLAUDE_PLUGIN_ROOT} を hook で使いたい場合
 
@@ -1326,7 +1350,7 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 }
 ```
 
-→ Cowork では literal `${CLAUDE_PLUGIN_ROOT}/hooks/my-script.sh` が「実行」されようとして失敗（そんなパスのファイルは無いので）。
+→ Cowork では `$` 展開が抑止される + env も空なので、literal `${CLAUDE_PLUGIN_ROOT}/hooks/my-script.sh` を起動しようとして失敗（`cowork-presub-probe` で `${CLAUDE_PLUGIN_ROOT}` が literal のままと確認）。なお `${CLAUDE_PLUGIN_ROOT}` は事前置換対象ではなく env シェル展開対象（§1.2 の訂正参照）なので、CLI でも env が来ているから解決しているだけ。
 
 **OK（bash -c で wrap）：**
 
