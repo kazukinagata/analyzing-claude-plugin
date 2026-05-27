@@ -1744,12 +1744,21 @@ echo "I received: STATE_MARKER=hello-from-hook"
 ​```
 ```
 
-ただしこれは **session-scope（同一 chat 内）でしか有効ではなく**、永続化にも使えない。新規 chat では SessionStart hook が再度発火して別の context として再注入される。
+ただしこれは **session-scope（同一 chat 内）でしか有効ではなく**、永続化にも使えない。新規 chat では SessionStart hook が再度発火して別の context として再注入される（※ resume での再発火は実測済み、brand-new chat での再発火は cross-chat 隔離 §2.14 からの推論）。
+
+### CLAUDE_ENV_FILE 経路も Cowork では使えない（2026-05-27, `cowork-envfile-probe/`）
+
+CLI には stdout 以外にもう一つ hook→Bash tool の env 受け渡し経路がある：SessionStart 等の hook に渡される `$CLAUDE_ENV_FILE` に `export FOO=bar` を書くと、後続の Bash tool 呼び出しに env として渡る仕組み。これが Cowork で使えるか検証した。
+
+- **CLI baseline**：hook env に `CLAUDE_ENV_FILE=/.../session-env/<sid>/sessionstart-hook-NN.sh` が set されており、そこに `export ENVFILE_MARKER=hello-from-envfile` を書くと、skill body の Bash tool で `$ENVFILE_MARKER=hello-from-envfile` が読めた（機構が動く）
+- **Cowork**：単一 echo / 複数文 echo の SessionStart hook はどちらも context に surface したが、その出力は **`CLAUDE_ENV_FILE=[]`（空）**。つまり **Cowork の plugin-level hook には CLAUDE_ENV_FILE 自体が渡されていない**。書き込む先が無いので機構は起動すらできず、skill body の `$ENVFILE_MARKER` も `(unset)`。
+
+→ §2.1 の「Cowork hook env から `CLAUDE_*` が消える」に `CLAUDE_ENV_FILE` も含まれる。結果、**hook→skill の state 受け渡しは stdout → additionalContext が唯一の経路**で確定（CLAUDE_ENV_FILE という代替も塞がれている）。
 
 ### 実用上の含意
 
 - Cowork で「hook が状態を持って、後で skill が読む」というよくあるパターンは動かない
-- 状態を渡す手段は stdout → additionalContext のみ
+- 状態を渡す手段は stdout → additionalContext のみ（CLAUDE_ENV_FILE 経路も CLAUDE_ENV_FILE 自体が未設定なので不可）
 - 永続化が必要な plugin は Cowork で別設計が必要（outputs/ にユーザの目に見える形で書く等）
 
 ## 2.9 skill frontmatter hook の登録タイミング（§1.8 の Cowork 版）

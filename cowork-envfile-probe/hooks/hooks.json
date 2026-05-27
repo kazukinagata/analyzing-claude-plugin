@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "bash -c 'echo \"[DIAG-ENVFILE] CLAUDE_ENV_FILE=[$CLAUDE_ENV_FILE] host=$(hostname)\"'" },
+          { "type": "command", "command": "bash -c 'echo \"[DIAG-MULTI] line1\"; echo \"[DIAG-MULTI] line2\"'" },
+          { "type": "command", "command": "bash -c 'if [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"export ENVFILE_MARKER=hello-from-envfile\" >> \"$CLAUDE_ENV_FILE\"; fi'" }
+        ]
+      }
+    ]
+  }
+}

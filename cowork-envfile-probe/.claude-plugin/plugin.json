@@ -1,0 +1,6 @@
+{
+  "name": "cowork-envfile-probe",
+  "version": "0.1.0",
+  "description": "Tests whether the CLAUDE_ENV_FILE mechanism (SessionStart hook writes export lines, propagated to Bash tool env) works on Cowork vs CLI.",
+  "author": { "name": "kazukinagata" }
+}
