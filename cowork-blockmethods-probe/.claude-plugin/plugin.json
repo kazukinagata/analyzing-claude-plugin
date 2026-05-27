@@ -1,0 +1,6 @@
+{
+  "name": "cowork-blockmethods-probe",
+  "version": "0.1.0",
+  "description": "Tests whether each documented PreToolUse block method (decision:block, hookSpecificOutput.permissionDecision:deny, exit 2) is honored on Cowork vs CLI.",
+  "author": { "name": "kazukinagata" }
+}

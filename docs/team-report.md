@@ -1818,26 +1818,51 @@ Cowork 運用：
 
 ### 実用上の対策
 
-- Cowork で長期的な guard を仕掛けたいなら frontmatter hook ではなく plugin-level hook を使う（ただし §2.10 の通り plugin-level PreToolUse block は無効化されている）
+- Cowork で長期的な guard を仕掛けたいなら frontmatter hook ではなく plugin-level hook を使う（§2.10 の訂正の通り、plugin-level PreToolUse block は Cowork でも効く。ただし `${CLAUDE_PLUGIN_ROOT}` で外部スクリプトを呼ばず inline で書くこと）
 - 「user の bash 試行を guard したい」系の plugin は Cowork で実質機能不能
 - 諦めて skill body の冒頭でチェックを書く、または各 skill に inline で同じガードを置く
 
-## 2.10 plugin-level PreToolUse block の無効化
+## 2.10 plugin-level PreToolUse block は Cowork でも効く（旧「無効化」結論を訂正）／ frontmatter は効かない
 
-CLI では plugin-level `PreToolUse` hook で `{"decision":"block","reason":"..."}` を返せば Bash tool 等を止められた。**Cowork ではこれが完全に死亡**。
+> 🔴 **重大訂正（2026-05-27, `cowork-blockmethods-probe/`）**：このセクションは当初「Cowork では plugin-level PreToolUse block が完全に死亡」と書いていたが、**誤り**。再検証の結果、**plugin-level PreToolUse block は Cowork でも効く**（3 つの documented 形式すべて）。旧結論は probe のバグによる artifact だった。
 
-### 実装例
+### 正しい結論：plugin-level PreToolUse block は Cowork で honor される
+
+`cowork-blockmethods-probe` で、PreToolUse の 3 つの documented block 形式を inline hook（外部スクリプト不要・redirect なし）で試した：
+
+| block 方式 | hook が emit するもの | CLI | Cowork |
+|---|---|---|---|
+| `decision:block`（レガシー） | `{"decision":"block","reason":"BLK-decision"}` | ブロック | **ブロック** |
+| `hookSpecificOutput.permissionDecision:deny`（現行標準） | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",...}}` | ブロック | **ブロック** |
+| `exit 2` | exit code 2 | ブロック（hook error） | **ブロック（hook error）** |
+| control（block なし） | — | 実行 | 実行 |
+
+CLI でも Cowork でも、3 方式すべてが Bash tool 実行を阻止し、control だけが通った。**plugin-level PreToolUse の block は Cowork で機能する**。
+
+### 旧結論が誤っていた理由
+
+当初の probe 13（`hooks-block.json`）は block hook を次のように呼んでいた：
 
 ```json
-// hooks/hooks.json
+{ "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/block.sh\" Bash blocked-by-plugin-level" }
+```
+
+`${CLAUDE_PLUGIN_ROOT}` は §2.1 の通り **Cowork hook command では空**（env シェル展開で解決されるが env が無い）。そのため Cowork では実際には `"/hooks/block.sh" ...` が起動され、**スクリプトが見つからず exit 127 → block decision が一切 emit されない** → Bash tool が普通に実行された。これを「Cowork が block を無視する」と誤読していた。実態は「**block スクリプトが Cowork で見つからず、そもそも block を出していなかった**」。
+
+教訓：Cowork で block hook を書くなら **`${CLAUDE_PLUGIN_ROOT}` で外部スクリプトを呼ばず、block ロジックを hook command に inline で書く**（さらに redirect も入れない、§2.8 footgun）。これを守れば plugin-level block は Cowork で効く。
+
+### 実装例（Cowork で効く形）
+
+```json
+// hooks/hooks.json — inline、外部スクリプト/${CLAUDE_PLUGIN_ROOT}/redirect なし
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__workspace__bash",
+        "matcher": "Bash|mcp__workspace__bash",
         "hooks": [
           { "type": "command",
-            "command": "echo '{\"decision\":\"block\",\"reason\":\"plugin-level block\"}'" }
+            "command": "bash -c 'input=$(cat); case \"$input\" in *rm\\ -rf*) echo \"{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"blocked rm -rf\\\"}\" ;; esac'" }
         ]
       }
     ]
@@ -1845,21 +1870,7 @@ CLI では plugin-level `PreToolUse` hook で `{"decision":"block","reason":"...
 }
 ```
 
-CLI（matcher を `"Bash"` にした場合）：
-- ユーザが Claude に「`ls` してください」と頼む
-- Claude が Bash tool を呼ぶ
-- PreToolUse hook が block decision を返す
-- Claude に「blocked」が伝わって ls しない ✅
-
-Cowork：
-- 同じ操作
-- PreToolUse hook は呼ばれている形跡がある（log を取ると確認できる）
-- でも block decision が無視される
-- `ls` が普通に実行される ❌
-
-### 検証手順
-
-matcher を `Bash` / `Skill` / `.*` / `mcp__workspace__bash` の 4 通りすべて試した。JSON `decision: block` でも `exit 2` でも block されず、skill body の `echo TEST_BASH_OK_MARKER` が普通に実行された。
+matcher は CLI (`Bash`) と Cowork (`mcp__workspace__bash`) の両対応で `Bash|mcp__workspace__bash`（§2.11）。
 
 ### skill-to-skill block（frontmatter PreToolUse:Skill）も Cowork では効かない（2026-05-27 実測で訂正）
 
@@ -1876,9 +1887,9 @@ Cowork では Skill tool 呼び出し自体は起きているのに block が無
 
 ### 実用上の含意
 
-- 「危険な bash コマンドを plugin が事前に止める」系の guard は Cowork で動かない
-- **skill-to-skill block（frontmatter PreToolUse:Skill）も Cowork では動かない**（2026-05-27 実測。CLI では動く）
-- Cowork では plugin 側の hook による guard は plugin-level / frontmatter ともに信頼できない。ユーザ自身に permission UI で OK / NG を判断させる Cowork の仕組みに委ねる設計へ切り替える
+- **「危険な bash コマンドを plugin が事前に止める」系の guard は、plugin-level PreToolUse hook なら Cowork でも効く**（§2.10 の訂正）。ただし block ロジックは hook command に inline で書くこと（`${CLAUDE_PLUGIN_ROOT}` 経由の外部スクリプトは Cowork で見つからず block が emit されない／redirect は §2.8 footgun で出力が消える）
+- **skill-to-skill block（frontmatter PreToolUse:Skill）は Cowork では動かない**（2026-05-27 実測。frontmatter hook がそもそも発火しないため。CLI では動く）
+- まとめると Cowork の block は **plugin-level PreToolUse = 効く / frontmatter PreToolUse = 効かない** の二分。guard は plugin-level に inline で実装する
 
 ## 2.11 Bash tool 名は `mcp__workspace__bash`
 
@@ -2229,7 +2240,7 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 | skill body の path 参照 | `${CLAUDE_PLUGIN_ROOT}` を使うなら、Cowork では Windows path に展開されることを前提に `find /sessions` 経路で localize できるように書く |
 | skill description | `${CLAUDE_*}` や `<...>` を避ける |
 | state 永続化 | Cowork では `${CLAUDE_PLUGIN_DATA}` の write は届かない、`/tmp` も不可。stdout → additionalContext 経路のみ |
-| `PreToolUse:Bash` block | Cowork では plugin-level の block は無効。skill frontmatter で代替するか諦める |
+| `PreToolUse:Bash` block | plugin-level なら Cowork でも効く（inline 実装・`${CLAUDE_PLUGIN_ROOT}` 外部スクリプト/redirect 不可）。frontmatter PreToolUse:Skill は Cowork で効かない |
 | `UserPromptExpansion` event | Cowork validator が reject するので、Cowork 配布版では hooks.json から除外 |
 | 削除操作 | 接続フォルダでも `rm` は不可。一時ファイルは作らない |
 | userConfig | Cowork では UI が無い。CLI のみで使う設定として割り切る |

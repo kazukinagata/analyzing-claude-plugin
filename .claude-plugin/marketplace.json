@@ -72,6 +72,11 @@
       "name": "cowork-surface-probe",
       "source": "./cowork-surface-probe",
       "description": "Isolate which SessionStart hook command form fails to surface on Cowork"
+    },
+    {
+      "name": "cowork-blockmethods-probe",
+      "source": "./cowork-blockmethods-probe",
+      "description": "PreToolUse block-method matrix (decision/permissionDecision/exit2) CLI vs Cowork"
     }
   ]
 }

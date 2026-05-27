@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__workspace__bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'input=$(cat); case \"$input\" in *M_DECISION*) echo '\\''{\"decision\":\"block\",\"reason\":\"BLK-decision\"}'\\'' ;; *M_PERMISSION*) echo '\\''{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"BLK-permission\"}}'\\'' ;; *M_EXIT2*) exit 2 ;; esac'"
+          }
+        ]
+      }
+    ]
+  }
+}
