@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo 'UC-HOOK control=static_marker'" },
+          { "type": "command", "command": "echo 'UC-HOOK opt_plain=${user_config.opt_plain}'" },
+          { "type": "command", "command": "echo 'UC-HOOK req_plain=${user_config.req_plain}'" },
+          { "type": "command", "command": "echo 'UC-HOOK opt_secret=${user_config.opt_secret}'" },
+          { "type": "command", "command": "echo 'UC-HOOK req_secret=${user_config.req_secret}'" }
+        ]
+      }
+    ]
+  }
+}

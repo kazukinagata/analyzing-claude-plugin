@@ -1,0 +1,12 @@
+{
+  "name": "cowork-userconfig-probe",
+  "version": "0.1.0",
+  "description": "Tests userConfig input UI and runtime resolution across all four combinations of sensitive and required on CLI vs Cowork.",
+  "author": { "name": "kazukinagata" },
+  "userConfig": {
+    "opt_plain":  { "type": "string", "title": "Optional plain",  "description": "non-sensitive optional" },
+    "req_plain":  { "type": "string", "title": "Required plain",  "description": "non-sensitive required", "required": true },
+    "opt_secret": { "type": "string", "title": "Optional secret", "description": "sensitive optional", "sensitive": true },
+    "req_secret": { "type": "string", "title": "Required secret", "description": "sensitive required", "sensitive": true, "required": true }
+  }
+}

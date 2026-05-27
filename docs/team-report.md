@@ -1514,6 +1514,43 @@ Cowork（`my_key` 未設定）：
 
 silent skip は debug が極めて難しい挙動。
 
+### 再検証：機密×必須の全 4 組み合わせ（2026-05-27, `cowork-userconfig-probe/`）
+
+`opt_plain`（非機密・任意）/ `req_plain`（非機密・必須）/ `opt_secret`（機密・任意）/ `req_secret`（機密・必須）の 4 userConfig を宣言し、CLI と Cowork で挙動を比較した。
+
+**CLI 側（trigger のタイミング）：**
+
+| タイミング | 挙動 |
+|---|---|
+| `claude plugin install`（required 未設定） | warning「4 userConfig options not yet set (2 required)」のみ。**install は block しない**。`required: true` を認識して "(2 required)" とカウントする |
+| `claude` 起動のみ | **silent**（required 未設定でも自動プロンプトなし） |
+| `/plugin configure` 明示実行 | 対話 UI が出る。**required 項目に `*` マーク**（`Required plain*` 等）、optional は無印 |
+| **disable → enable** | **入力 UI が自動で出る**（§1.5 の trigger を required 付きで再現） |
+
+→ CLI の `required: true` は「強制」ではなく「UI ヒント（`*`）+ install warning + disable→enable trigger」。install を block も自動プロンプトもしない。
+
+**Cowork 側：**
+
+| 観察 | 結果 |
+|---|---|
+| install 時の required プロンプト | **出ない**（完全に無視） |
+| `/plugin configure` 相当 UI | **存在しない** |
+| **disable → enable での入力 UI** | **出ない**（CLI では出るのに Cowork では出ない＝入力経路ゼロ） |
+
+値を set する手段が一つも無いので、全 4 組が常に unset。その状態の runtime 解決（uc-check）：
+
+| combo | skill body（pre-sub） | plugin-level hook |
+|---|---|---|
+| `opt_plain`（非機密・任意） | literal `${user_config.opt_plain}` | 行が出ない（silent skip） |
+| `req_plain`（非機密・必須） | literal `${user_config.req_plain}` | 行が出ない |
+| `opt_secret`（機密・任意） | `[sensitive option 'opt_secret' not available in skill content]` | 行が出ない |
+| `req_secret`（機密・必須） | block 文字列 | 行が出ない |
+| control（変数なし） | — | `UC-HOOK control=static_marker`（出る） |
+
+→ **required/optional の区別は Cowork の runtime に影響しない**（UI が無いので値は常に unset）。機密軸だけが body で block を生む（§1.4 が Cowork でも有効）。CLI で全 4 値を set した対照では、body は非機密=実値 / 機密=block、plugin-level hook は **4 つとも平文**（機密も平文で plugin-level に来る、§1.4）だった。
+
+記事の「`/plugin configure` UI が Cowork に無い」は再現。さらに **disable→enable trigger も Cowork では死んでいる**ことが分かり、「Cowork には userConfig 入力経路が一つも無い」という強い形になる。
+
 ### 実用上の対策
 
 - Cowork では `${user_config.KEY}` を hook command に書かない

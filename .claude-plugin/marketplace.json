@@ -57,6 +57,11 @@
       "name": "cowork-fs-probe",
       "source": "./cowork-fs-probe",
       "description": "hook(host) vs Bash tool(VM) filesystem isolation test"
+    },
+    {
+      "name": "cowork-userconfig-probe",
+      "source": "./cowork-userconfig-probe",
+      "description": "userConfig sensitive x required combination test"
     }
   ]
 }
