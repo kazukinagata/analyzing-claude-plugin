@@ -47,6 +47,11 @@
       "name": "cowork-presub-probe",
       "source": "./cowork-presub-probe",
       "description": "CLAUDE_PLUGIN_ROOT pre-substitution test (top-level vs bash -c) for CLI vs Cowork"
+    },
+    {
+      "name": "fm-presub-probe",
+      "source": "./fm-presub-probe",
+      "description": "Frontmatter hook pre-sub vs shell-exp test (CLI-only)"
     }
   ]
 }

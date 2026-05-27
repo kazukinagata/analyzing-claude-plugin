@@ -1,0 +1,6 @@
+{
+  "name": "fm-presub-probe",
+  "version": "0.1.0",
+  "description": "Tests whether a skill frontmatter hook resolves CLAUDE_PLUGIN_ROOT and CLAUDE_PROJECT_DIR via pre-substitution or shell expansion, using bare vs single-quote forms. CLI-only (frontmatter hooks do not fire on Cowork).",
+  "author": { "name": "kazukinagata" }
+}

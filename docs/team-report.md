@@ -286,8 +286,10 @@ Claude Code 本体は hook command や skill body の文字列を実行前に `$
 | tier | 真の事前置換（quote 非依存） | env シェル展開で解決（quote 依存） |
 |---|---|---|
 | plugin-level hook | `${user_config.KEY}` のみ | `${CLAUDE_PLUGIN_ROOT/DATA/PROJECT_DIR}`（env が §1.1 で set されているから） |
-| skill frontmatter hook | （未精査） | `${CLAUDE_PLUGIN_ROOT/PROJECT_DIR}`（env set のもの） |
+| skill frontmatter hook | **無し**（`fm-presub-probe` で確認） | `${CLAUDE_PLUGIN_ROOT/PROJECT_DIR}`（env set のもの。bare 解決 / single-quote literal で確定） |
 | skill body | `PLUGIN_ROOT/PLUGIN_DATA/SKILL_DIR/SESSION_ID/PROJECT_DIR/user_config.KEY` 全部（env は空なのに解決＝quote 非依存の真の pre-sub、probe 22 で確認） | — |
+
+> skill frontmatter hook の裏取り（2026-05-27, `fm-presub-probe/`）：frontmatter PreToolUse hook で `echo "ROOT_BARE=${CLAUDE_PLUGIN_ROOT}"` と `echo 'ROOT_SQ=${CLAUDE_PLUGIN_ROOT}'` を両方書いたところ、CLI では `ROOT_BARE=/実パス` / `ROOT_SQ=${CLAUDE_PLUGIN_ROOT}`（literal）、`PROJ_BARE=/実パス` / `PROJ_SQ=${CLAUDE_PROJECT_DIR}`（literal）。bare だけ解決し single-quote が literal = シェル展開であって pre-sub ではない、と確定。これで §1.1（env set）と §1.2 旧表記（pre-sub literal）の見かけの矛盾も解消した（別機構を測っていただけ）。なお frontmatter hook は Cowork では発火しないので（§2.9）、この検証は CLI 専用。
 
 含意：**hook command 中の `${CLAUDE_PLUGIN_ROOT}` は「事前置換対象」ではなく「env シェル展開対象」**。だから §1.1 で env が来ない Cowork の plugin-level hook では解決できない（§2.1 / §2.2）。skill body だけが env 非依存の真の事前置換で、Cowork でも（Windows path だが）解決する（§2.7）。
 
