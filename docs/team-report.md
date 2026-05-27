@@ -1637,7 +1637,24 @@ $ bash "${CLAUDE_PLUGIN_ROOT}/scripts/say-hi.sh"
 bash: C:/Users/<user>/.../scripts/say-hi.sh: No such file or directory
 ```
 
-### Cowork で bundled script を実行する正しい方法
+### ただし Read tool はこの Windows パスを読める（tool 別の差、2026-05-27 Cowork 観察）
+
+「Bash で使えない」のは VM 側 shell が Windows パスを解決できないからで、**file tool（Read / Write / Edit）は別の話**。Cowork で skill body の `${CLAUDE_PLUGIN_ROOT}/<file>`（= host Windows パス）を各 tool で叩いた結果：
+
+| tool | host Windows パス（plugin install dir）への動作 |
+|---|---|
+| **Read** | ✅ **読める**（接続フォルダ外でも。Read tool は広範な FS アクセスを持ち、virtio-fs 経由で host ファイルに届く） |
+| **Write** | ❌ ブロック（接続フォルダ外への書き込み不可） |
+| **Edit** | ❌ ブロック（同上。先に Read していても不可） |
+| **Bash** | ❌ 不可（VM 側 shell、Windows パス不在） |
+
+実用上の含意：
+- **plugin の同梱ファイルを「読む」だけなら、skill body の `${CLAUDE_PLUGIN_ROOT}/<file>` を Read tool でそのまま読める**（下記 `find /sessions` の localize は不要）。CHANGELOG や設定テンプレートを参照する用途はこれで足りる
+- 「実行」(Bash) や「書き換え」(Write/Edit) は不可。実行したいなら下記の localize、書き換えは plugin dir 外なので諦める（§2.15 の「plugin dir は read-only / 接続フォルダ外は書けない」と整合）
+
+> ※ この tool 別マトリクスは Cowork セッションでの観察に基づく（追試 probe は未実施だが、`${CLAUDE_PLUGIN_ROOT}` を body に持つ任意の skill で Read/Write/Edit/Bash を 1 プロンプトずつ叩けば再現できる）。
+
+### Cowork で bundled script を実行する正しい方法（Bash で実行したい場合）
 
 `find /sessions` で cloud VM 側の mount path を localize：
 
