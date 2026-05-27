@@ -1755,6 +1755,26 @@ CLI には stdout 以外にもう一つ hook→Bash tool の env 受け渡し経
 
 → §2.1 の「Cowork hook env から `CLAUDE_*` が消える」に `CLAUDE_ENV_FILE` も含まれる。結果、**hook→skill の state 受け渡しは stdout → additionalContext が唯一の経路**で確定（CLAUDE_ENV_FILE という代替も塞がれている）。
 
+### ⚠ 重大な footgun：hook command に redirect があると stdout が surface しない（2026-05-27, `cowork-surface-probe/`）
+
+その「唯一の経路」である stdout→additionalContext にも罠がある。SessionStart hook command の形を 5 variant で切り分けたところ、**command 文字列に redirect 演算子（`>` / `>>`）が含まれていると、その hook の stdout が丸ごと context に surface しなくなる**ことが判明した。
+
+| variant | hook command の形 | Cowork で surface |
+|---|---|---|
+| V1 | `echo "..."`（単一） | ✅ |
+| V2 | `echo a; echo b`（複数文） | ✅ |
+| V3 | `echo x; if [ -n "$HOME" ]; then echo then; else echo else; fi`（if/else、redirect なし） | ✅ |
+| V4 | `echo x; echo y >> /tmp/f; echo after`（**実行される redirect**） | ❌ **hook 全体が消失**（前後の echo も含めて） |
+| V5 | `echo x; if [ -n "$CLAUDE_ENV_FILE" ]; then echo w >> "$CLAUDE_ENV_FILE"; ...; else echo else; fi`（**ガードで実行されない redirect**） | ❌ **hook 全体が消失** |
+
+ポイント：
+- **`if/then/else` 構造は無罪**（V3 が surface）。複数文も無罪（V2）。
+- **redirect の有無だけが効く**。V4（redirect 実行）も V5（redirect が else 分岐で実行されない）も両方消える → **redirect トークンが command 文字列に存在するだけ**で、実行有無に関係なく hook の stdout 全体が捨てられる（Cowork 側が command を静的にスキャンして「出力を自前で管理する command」と判断している様子）。
+
+実用上の含意：
+- Cowork で hook の stdout を additionalContext として使いたいなら、**その hook command に `>` / `>>` を一切書かない**。`echo "info" && log >> /var/log/x` のような「ついでにログも吐く」hook は、Cowork では `info` も含めて無言で消える
+- これは §2.8 で当初 `[ENVFILE-HOOK]`（`>> "$CLAUDE_ENV_FILE"` 入り）が surface しなかった真因。当初「stale chat か」と推測したが誤りで、redirect トークンが原因だった（fresh chat でも再現）
+
 ### 実用上の含意
 
 - Cowork で「hook が状態を持って、後で skill が読む」というよくあるパターンは動かない

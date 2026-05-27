@@ -1,0 +1,6 @@
+{
+  "name": "cowork-surface-probe",
+  "version": "0.1.0",
+  "description": "Isolates which SessionStart hook command form (plain echo, multi-statement, if/else, redirect, guarded redirect to empty var) fails to surface its stdout in Cowork context.",
+  "author": { "name": "kazukinagata" }
+}

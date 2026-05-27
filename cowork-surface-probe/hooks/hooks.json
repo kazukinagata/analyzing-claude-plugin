@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[V1] plain\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[V2] a\"; echo \"[V2] b\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[V3] x\"; if [ -n \"$HOME\" ]; then echo \"[V3] then\"; else echo \"[V3] else\"; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[V4] x\"; echo \"[V4] y\" >> /tmp/v4probe.txt; echo \"[V4] after-redirect\"'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[V5] x\"; if [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"[V5] wrote\" >> \"$CLAUDE_ENV_FILE\"; echo \"[V5] then2\"; else echo \"[V5] else\"; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}

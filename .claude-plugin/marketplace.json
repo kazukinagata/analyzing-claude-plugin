@@ -67,6 +67,11 @@
       "name": "cowork-envfile-probe",
       "source": "./cowork-envfile-probe",
       "description": "CLAUDE_ENV_FILE hook->Bash-tool env propagation test"
+    },
+    {
+      "name": "cowork-surface-probe",
+      "source": "./cowork-surface-probe",
+      "description": "Isolate which SessionStart hook command form fails to surface on Cowork"
     }
   ]
 }
