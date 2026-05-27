@@ -52,6 +52,11 @@
       "name": "fm-presub-probe",
       "source": "./fm-presub-probe",
       "description": "Frontmatter hook pre-sub vs shell-exp test (CLI-only)"
+    },
+    {
+      "name": "cowork-fs-probe",
+      "source": "./cowork-fs-probe",
+      "description": "hook(host) vs Bash tool(VM) filesystem isolation test"
     }
   ]
 }

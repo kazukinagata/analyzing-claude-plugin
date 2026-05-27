@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "bash -c 'echo \"FS_CANARY_CONTENT host=$(hostname) ts=$(date +%s)\" > /tmp/cowork-fs-canary.txt; echo \"[FS-HOOK] wrote /tmp/cowork-fs-canary.txt on host=$(hostname)\"'" }
+        ]
+      }
+    ]
+  }
+}

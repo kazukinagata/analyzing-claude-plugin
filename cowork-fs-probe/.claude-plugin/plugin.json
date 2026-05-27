@@ -1,0 +1,6 @@
+{
+  "name": "cowork-fs-probe",
+  "version": "0.1.0",
+  "description": "Tests filesystem isolation between plugin-level hook (host) and Bash tool (VM) on Cowork by writing a /tmp canary in a SessionStart hook and reading it from a skill body.",
+  "author": { "name": "kazukinagata" }
+}
