@@ -77,6 +77,11 @@
       "name": "cowork-blockmethods-probe",
       "source": "./cowork-blockmethods-probe",
       "description": "PreToolUse block-method matrix (decision/permissionDecision/exit2) CLI vs Cowork"
+    },
+    {
+      "name": "cowork-mp-script-probe",
+      "source": "./cowork-mp-script-probe",
+      "description": "Tests ${CLAUDE_PLUGIN_ROOT}/hooks/script.sh launch in plugin-level SessionStart hook. Designed to be installed via the Cowork GUI marketplace flow (not zip upload) and compared against zip-upload baseline."
     }
   ]
 }

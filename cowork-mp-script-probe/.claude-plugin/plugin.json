@@ -1,0 +1,6 @@
+{
+  "name": "cowork-mp-script-probe",
+  "version": "0.1.0",
+  "description": "Tests whether ${CLAUDE_PLUGIN_ROOT}/path/to/script.sh in a plugin-level SessionStart hook command actually launches the bundled script. Designed to compare GUI marketplace install vs zip-upload install on Cowork.",
+  "author": { "name": "kazukinagata" }
+}

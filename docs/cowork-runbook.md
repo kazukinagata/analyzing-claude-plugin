@@ -131,6 +131,84 @@ CLI baseline は probe 20 SKILL.md 内で `claude plugin validate "$proj/verifie
 
 outputs/ への書き込みが成功、plugin dir への書き込みが失敗することを確認。`request_cowork_directory` 承認 UI が出るかを目視。
 
+### 22-cowork-mp-script — GUI marketplace install 経路の検証
+
+§1〜§21 までは全て **zip upload 経路**での検証だった。Claude Desktop の Cowork には別経路として **「GitHub の marketplace を直接追加して、その中の plugin を install する」GUI フロー**が存在する。zip upload と env / 置換挙動が同じかは未検証なので、それを切り分ける。
+
+#### 0. 前提
+
+- 本リポジトリが GitHub にあること（既存：`github.com/kazukinagata/analyzing-claude-plugin`、default branch `main`）
+- ローカルでの変更（cowork-mp-script-probe/ と marketplace.json への追記）が **default branch に push されていること**（marketplace fetch は default branch を見る）
+
+```sh
+cd /path/to/analyzing-claude-plugin
+git push origin main
+```
+
+#### 1. CLI baseline（推奨）
+
+Cowork に上げる前に、CLI で marker.sh が起動することを確認しておく：
+
+```sh
+. scripts/_env.sh
+claude --plugin-dir ./cowork-mp-script-probe
+```
+
+prompt：
+```
+/cowork-mp-script-probe:show-mp-script
+```
+
+CLI で期待される結果：
+- `MP_SCRIPT_CONTROL=static_marker_no_var` が出る
+- `MP_SCRIPT_ECHO_BARE=/...absolute path...` （env シェル展開で実パス）
+- `MP_SCRIPT_ECHO_SQ=${CLAUDE_PLUGIN_ROOT}` （single-quote で literal、事前置換は走らない、§1.2 と一致）
+- `MP_SCRIPT_MARKER form=topbare ...` が出る（script 起動成功、`ROOT_ENV=[/...]`）
+- `MP_SCRIPT_MARKER form=bashbrace ...` が出る（同上）
+
+CLI で marker 2 行とも出れば probe そのものは健全。Cowork に進む。
+
+#### 2. Claude Desktop / Cowork：GUI marketplace add
+
+Claude Desktop アプリで：
+1. Settings → Plugins → Marketplaces セクション
+2. 「Add marketplace」相当のボタン
+3. リポジトリ指定：`kazukinagata/analyzing-claude-plugin`（GitHub owner/repo）
+4. 確認ダイアログを承認
+
+Marketplace listing に `verifier-mp` が見え、その中に `cowork-mp-script-probe` を含む plugin 一覧が並ぶ。
+
+#### 3. plugin install（GUI）
+
+`cowork-mp-script-probe` を選んで install。**zip upload 用の UI 経路ではなく、marketplace listing からの install ボタン**を必ず使う。
+
+#### 4. Cowork session 起動 + probe 実行
+
+新しい Cowork session を開く（または既存 session を resume）。SessionStart hook が発火するはずなので、session 開始直後の context にすでに `MP_SCRIPT_*` 系の行が含まれている。
+
+```
+/cowork-mp-script-probe:show-mp-script
+```
+
+skill が context 内の MP_SCRIPT_* 行を抽出して提示してくれる。
+
+#### 5. 比較ポイント（zip 経路 baseline との差分）
+
+zip upload 経路で既知の挙動（§2.1 / §2.2）：
+- `MP_SCRIPT_CONTROL` → 出る
+- `MP_SCRIPT_ECHO_BARE` → 空（top-level で `$VAR` 展開が抑止される）
+- `MP_SCRIPT_ECHO_SQ` → literal `${CLAUDE_PLUGIN_ROOT}`
+- `MP_SCRIPT_MARKER form=topbare` → **行が出ない**（`${CLAUDE_PLUGIN_ROOT}` literal で path 不在 → 起動失敗）
+- `MP_SCRIPT_MARKER form=bashbrace` → **行が出ない**（env 空なので `/hooks/marker.sh` を起動しようとして失敗）
+
+GUI marketplace install で **挙動が同じ**なら：plugin install path に依存せず Cowork 共通の制約、§2.1 / §2.2 を一般化できる。
+
+GUI marketplace install で **挙動が違う**なら：例えば `MARKER form=topbare` が出る、`ROOT_ENV` に値が入る、等。zip 経路だけの bug / 仕様の可能性。findings に書き分ける必要あり。
+
+#### 6. findings 記録
+
+`findings/v<version>/cowork-mp-script.md` に観測した 5 行（無い場合は「無し」と明記）と各変種の verdict を記録。可能なら `marketplace_name` 等の OTel event 情報も拾う（§B.3）。
+
 ## 5. 結果記録
 
 各 probe の結果を `findings/v2.1.143/cowork-report.md` に手書きで記録。テンプレート：

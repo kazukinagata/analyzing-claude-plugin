@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo MP_SCRIPT_CONTROL=static_marker_no_var" },
+          { "type": "command", "command": "echo MP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}" },
+          { "type": "command", "command": "echo 'MP_SCRIPT_ECHO_SQ=${CLAUDE_PLUGIN_ROOT}'" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/marker.sh\" topbare" },
+          { "type": "command", "command": "bash -c '\"$CLAUDE_PLUGIN_ROOT/hooks/marker.sh\" bashbrace'" }
+        ]
+      }
+    ]
+  }
+}
