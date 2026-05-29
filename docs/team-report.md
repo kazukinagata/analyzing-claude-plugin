@@ -1508,6 +1508,46 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 
 書き換え方針：**動的 path 解決は完全に諦め、静的 echo のみで context に情報を流す**設計にする。
 
+### 追検証：exec form（`args`）でも path 解決は dead — form 非依存で確定（2026-05-30, `cowork-exec-form-probe/`）
+
+§2.1 / §2.2 はすべて **shell form**（hook command エントリに `command` だけ、`args` なし）で観測したもの。公式 hooks docs（`code.claude.com/docs/en/hooks`）には別モードの **exec form**（`args` あり）の説明があり、「exec form では `command`・各 `args` 要素に含まれる path placeholder（`${CLAUDE_PLUGIN_ROOT}` 等）を plain string として事前置換し、かつ spawn したプロセスの env にも export する」と明記されている。さらに「path placeholder を参照する hook は exec form を使え（`Set args whenever the hook references a path placeholder`）」と推奨している。
+
+そこで「exec form なら Cowork でも path 解決が生き返るのでは」という仮説を検証。`cowork-exec-form-probe`（plugin-level SessionStart、全 7 エントリが `args` 付き = exec form）を **GUI marketplace install → 新規 Cowork chat** で実機観測：
+
+| 観測点 (hooks.json exec form) | 観測値 | 評価 |
+|---|---|---|
+| `{command:"bash", args:["-c","echo EXEC_CONTROL=static_no_var"]}` | `EXEC_CONTROL=static_no_var` | exec form の `bash` 解決・実行・surface は **成功** |
+| `{command:"bash", args:["-c","echo EXEC_ARGS_PLACEHOLDER=[$1]","_","${CLAUDE_PLUGIN_ROOT}"]}` | `EXEC_ARGS_PLACEHOLDER=[]` | **機構1（テキスト事前置換）dead**：args 要素の placeholder が実パスにならず空 |
+| `{command:"bash", args:["-c","...printenv CLAUDE_PLUGIN_ROOT..."]}` | `EXEC_ENV_ROOT=[] EXEC_ENV_DATA=[] EXEC_ENV_PROJ=[]` | **機構2（env export）dead**：§2.1 と完全一致（printenv 読みなので置換混入なし） |
+| `{command:"${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh", args:["execdirect"]}` | marker 行 **無し** | placeholder 空 → `/hooks/exec-marker.sh` を直接 spawn しようとして失敗 |
+| `{command:"bash", args:["${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh","execbash"]}` | marker 行 **無し** | 同上（bash が空パスの script を読めず失敗） |
+| `{command:"echo", args:["EXEC_ECHO_BUILTIN=reached"]}` | **無し** | **機構4**：`echo` が exec form の command として解決不可（`/bin/echo` は WSL にあるが exec form の command 解決層を通っていない。docs の「`.cmd`/`.bat` shim は実行不可、実 .exe が要る」と同系） |
+| `{command:"bash", args:["-c","echo EXEC_HOST=$(hostname) EXEC_WSL_LIB=... EXEC_MNT_C=..."]}` | `EXEC_HOST=LAPTOP-BKGB6100 EXEC_WSL_LIB=present EXEC_MNT_C=present` | **機構5**：exec form の bash も **WSL2 で実行**。shell form と同じ委譲層、別経路ではない |
+
+**確定事項（2×2 = 「空 × 空」セル）**：
+
+1. **exec form でも path 解決は dead**。テキスト事前置換（機構1）も env export（機構2）も両方とも値を供給しない。`${CLAUDE_PLUGIN_ROOT}` は exec form でも空になる。
+2. よって §2.1 / §2.2 の結論「Cowork plugin-level hook では plugin root path を取得する手段がない」は **form 非依存**（shell form / exec form を問わず成立）と一段強く確定。前回「動的 path 解決を諦める」とした方針は exec form を試しても変わらない。
+3. 根本原因は §2.1 と同一：**Cowork の plugin-level hook 環境では launcher が plugin root の値そのものを持っていない**。docs の exec-form 事前置換も同じ空ソースを引くため空になる、と整合的に説明できる。
+
+**CLI baseline（同 probe を `claude --plugin-dir ./cowork-exec-form-probe` で WSL2 ローカル実行、2026-05-30）**：Cowork の壁が exec-form 一般や probe の不備ではなく **Cowork 固有**であることを確定するため、同じ probe を CLI で実行した：
+
+| 観測点 | CLI (WSL2 local) | Cowork (plugin-level hook) |
+|---|---|---|
+| `EXEC_CONTROL` | `static_no_var` | `static_no_var`（一致） |
+| `EXEC_ARGS_PLACEHOLDER`（機構1） | `[/home/.../cowork-exec-form-probe]` 実パス | `[]` 空 |
+| `EXEC_ENV_ROOT/DATA/PROJ`（機構2） | 全て実パス（DATA=`~/.claude/plugins/data/...-inline`、PROJ=repo root） | 全て `[]` 空 |
+| `EXEC_MARKER form=execdirect`（機構3） | 起動（`reached=yes`） | 無し |
+| `EXEC_MARKER form=execbash`（機構3） | 起動（`reached=yes`） | 無し |
+| `EXEC_ECHO_BUILTIN`（機構4） | `reached`（`echo` 解決成功） | 無し（解決失敗） |
+| `EXEC_HOST/WSL_LIB/MNT_C`（機構5） | `LAPTOP-BKGB6100` / present / present | 同左（両方 WSL2 実行） |
+
+→ CLI は **「実パス × 実パス」セル**で 7 機構すべて docs 通りに機能。Cowork は **「空 × 空」セル**。HOST/WSL マーカーは両者一致（同じ WSL2 層で実行）なのに、placeholder 事前置換・env export・script 起動・echo 解決が Cowork だけ全滅。
+
+**docs との乖離点（baseline 付きで確定）**：公式 docs は exec form で「placeholder を実パスに事前置換 + env 変数として export の両方が効く」と保証している。**CLI ではその通り効く（baseline で確認済み）が、Cowork の plugin-level hook では両方とも不発**。よってこれは exec form 仕様の問題でも probe の不備でもなく、**Cowork（本検証機では Windows+WSL2）固有の exec-form 挙動逸脱**と確定。根本は §2.1（Cowork の plugin-level hook 環境は launcher が plugin root 値を持たない）で、exec form の事前置換・env export も同じ空ソースを引くため空になる。
+
+副次（機構4 の CLI/Cowork 差）：`echo` を exec form の `command` に直書きすると、**CLI では `/bin/echo` に解決して動くが Cowork では解決しない**。exec form の command 解決層も Cowork では別挙動。実用上は exec form で何か実行したいなら `command:"bash"`（確実に解決できる名前）+ ロジックを `args:["-c","..."]` に寄せる形が唯一安定だが、上記の通り placeholder/env はどのみち Cowork では空なので、結局 §2.2 の「静的 echo のみ」方針に帰着する。
+
 ### §2.2bis hook 失敗のデバッグ：session-export zip（2026-05-29 新規）
 
 「Cowork で hook が silent に失敗する」というのは context への surface 観点では事実だが、**Claude Desktop は host 側に全 hook 実行の構造化記録を残している**。手段：
