@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo MP_DA_CONTROL=static_marker_no_var" },
+          { "type": "command", "command": "echo MP_DA_DQ=\"double-quoted\"" },
+          { "type": "command", "command": "echo MP_DA_DQ_INNER=hello-\"middle\"-world" },
+          { "type": "command", "command": "echo MP_DA_HOME=$HOME" },
+          { "type": "command", "command": "echo MP_DA_HOME_BRACE=${HOME}" },
+          { "type": "command", "command": "echo MP_DA_PATH=$PATH" },
+          { "type": "command", "command": "echo MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY" },
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_HOME=$HOME'" }
+        ]
+      }
+    ]
+  }
+}

@@ -82,6 +82,11 @@
       "name": "cowork-mp-script-probe",
       "source": "./cowork-mp-script-probe",
       "description": "Tests ${CLAUDE_PLUGIN_ROOT}/hooks/script.sh launch in plugin-level SessionStart hook. Designed to be installed via the Cowork GUI marketplace flow (not zip upload) and compared against zip-upload baseline."
+    },
+    {
+      "name": "cowork-mp-disambig-probe",
+      "source": "./cowork-mp-disambig-probe",
+      "description": "Disambiguator probe. Adds double-quote and $HOME observation points to settle whether Cowork hook command runtime is (a) shell-bypassed launcher or (b) bash -c with $-escape + path-prefix pre-sub."
     }
   ]
 }

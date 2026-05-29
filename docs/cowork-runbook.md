@@ -196,18 +196,68 @@ skill が context 内の MP_SCRIPT_* 行を抽出して提示してくれる。
 
 zip upload 経路で既知の挙動（§2.1 / §2.2）：
 - `MP_SCRIPT_CONTROL` → 出る
-- `MP_SCRIPT_ECHO_BARE` → 空（top-level で `$VAR` 展開が抑止される）
+- `MP_SCRIPT_ECHO_BARE` → **literal `${CLAUDE_PLUGIN_ROOT}`**（top-level で `$VAR` 展開が抑止されるため、空ではなく literal）
 - `MP_SCRIPT_ECHO_SQ` → literal `${CLAUDE_PLUGIN_ROOT}`
-- `MP_SCRIPT_MARKER form=topbare` → **行が出ない**（`${CLAUDE_PLUGIN_ROOT}` literal で path 不在 → 起動失敗）
-- `MP_SCRIPT_MARKER form=bashbrace` → **行が出ない**（env 空なので `/hooks/marker.sh` を起動しようとして失敗）
+- `MP_SCRIPT_MARKER form=topbare` → **行が出ない**（`${CLAUDE_PLUGIN_ROOT}` literal で path 不在 → exec 失敗、stderr は surface しない）
+- `MP_SCRIPT_MARKER form=bashbrace` → **行が出ない**（`bash -c` 内では `$CLAUDE_PLUGIN_ROOT` の env 展開は走るが env が空、結果 `/hooks/marker.sh` を起動しようとして exec 失敗）
 
 GUI marketplace install で **挙動が同じ**なら：plugin install path に依存せず Cowork 共通の制約、§2.1 / §2.2 を一般化できる。
 
 GUI marketplace install で **挙動が違う**なら：例えば `MARKER form=topbare` が出る、`ROOT_ENV` に値が入る、等。zip 経路だけの bug / 仕様の可能性。findings に書き分ける必要あり。
 
+**実観測（2026-05-29, GUI marketplace install）**：5 観測点すべてが zip 経路と完全一致。`install path 非依存、Cowork 共通制約`として確定。`docs/team-report.md` §2.2 末尾に追記済み。
+
 #### 6. findings 記録
 
 `findings/v<version>/cowork-mp-script.md` に観測した 5 行（無い場合は「無し」と明記）と各変種の verdict を記録。可能なら `marketplace_name` 等の OTel event 情報も拾う（§B.3）。
+
+### 23-cowork-mp-disambig — hook runtime model の最終切り分け
+
+`cowork-mp-script-probe` の観測（§2.2 モデル訂正）で「Cowork の hook command は `bash -c` を経由した通常 POSIX 展開を**経ていない**らしい」までは確定したが、**実装が (a) shell bypass か (b) bash -c with $-escape か**は ECHO_BARE/ECHO_SQ だけでは切り分けられない。`cowork-mp-disambig-probe` は double-quote と `$HOME`（env に値が確実にある変数）と unset 変数の 3 軸で最終切り分けを行う。
+
+#### 1. CLI baseline
+
+```sh
+. scripts/_env.sh
+claude --plugin-dir ./cowork-mp-disambig-probe
+```
+
+prompt：
+```
+/cowork-mp-disambig-probe:show-mp-disambig
+```
+
+CLI 期待値（参考、通常 shell 経由）：
+- `MP_DA_DQ=double-quoted`（quote 消費）
+- `MP_DA_DQ_INNER=hello-middle-world`
+- `MP_DA_HOME=/home/...`
+- `MP_DA_HOME_BRACE=/home/...`
+- `MP_DA_PATH=/usr/local/sbin:...`
+- `MP_DA_NUL=`（空、unset env は empty）
+- `MP_DA_BASH_HOME=/home/...`
+
+#### 2. GUI marketplace install + Cowork 実行
+
+`docs/cowork-runbook.md` §22 と同じ手順で `cowork-mp-disambig-probe` を install → 新規 Cowork chat → `/cowork-mp-disambig-probe:show-mp-disambig`。
+
+#### 3. 解釈
+
+8 観測点で以下のように verdict が決まる：
+
+| 観測 | 意味 |
+|---|---|
+| `MP_DA_DQ="double-quoted"` literal | shell parser が動いていない（または `"` が escape されている） |
+| `MP_DA_DQ=double-quoted` | shell parser が動いている → モデル (b) 強化 |
+| `MP_DA_HOME=$HOME` literal | env 展開ゼロ → モデル (a) 強化 |
+| `MP_DA_HOME=/home/...` 等の実値 | env 展開あり → モデル (b)、ただし `$` escape は限定的 |
+| `MP_DA_NUL=` empty | env 展開はあるが値が無いので empty。モデル (b) 強化 |
+| `MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY` literal | env 展開ゼロ → モデル (a) 強化 |
+
+ECHO_BARE で env 展開ゼロが既に確定しているので、ここで HOME / NUL が **literal** で残れば「shell bypass モデル (a) 」が決定打。逆に HOME が実値、NUL が empty で resolve したら「`$` escape は `CLAUDE_PLUGIN_ROOT` だけにかかっている」可能性があり、もっと込み入った escape ルールを推定する必要が出る。
+
+#### 4. session-export での裏取り
+
+§22 と同じく Claude Desktop の Export Session → zip 中 `<sessionId>.jsonl` を `jq` で grep。各 hook entry の `command` / `stdout` / `exitCode` を確認すれば context 経由より厳密に観察できる（context 経路で missing しても zip には残る、§2.2bis）。
 
 ## 5. 結果記録
 

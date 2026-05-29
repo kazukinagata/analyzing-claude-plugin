@@ -1,0 +1,6 @@
+{
+  "name": "cowork-mp-disambig-probe",
+  "version": "0.1.0",
+  "description": "Disambiguator for two competing models of Cowork hook command execution: (a) shell bypass with launcher-side tokenization, or (b) bash -c with $-escape + path-prefix pre-substitution. Adds double-quoted and $HOME observation points.",
+  "author": { "name": "kazukinagata" }
+}

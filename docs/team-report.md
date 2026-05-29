@@ -1392,6 +1392,140 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 - 単純な定数 echo は top-level でも OK
 - top-level command で `${...}` を書くと「動作確認しても期待した値が context に出ない、literal が出る」という事象になる。最初に踏みがちな罠
 
+### 追検証：GUI marketplace install 経路（2026-05-29, `cowork-mp-script-probe/`）
+
+§2.1 / §2.2 はこれまで全て **zip upload 経路**で観測したものだった。Claude Desktop の GUI から「marketplace add → install」する経路（zip upload とは別 UI）でも同じ挙動かを `cowork-mp-script-probe` で測った。
+
+5 観測点（plugin-level SessionStart hook、新規 Cowork chat）：
+
+| 観測点 | zip upload (既知) | GUI marketplace (今回) |
+|---|---|---|
+| `MP_SCRIPT_CONTROL=static_marker_no_var`（静的 echo） | 出る | 出る |
+| `MP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}`（top-level 裸） | literal | literal |
+| `MP_SCRIPT_ECHO_SQ='${CLAUDE_PLUGIN_ROOT}'`（top-level single-quote） | literal | literal |
+| `"${CLAUDE_PLUGIN_ROOT}/hooks/marker.sh" topbare`（top-level script 起動） | marker 行出ない | marker 行出ない |
+| `bash -c '"$CLAUDE_PLUGIN_ROOT/hooks/marker.sh" bashbrace'`（bash -c wrap） | marker 行出ない | marker 行出ない |
+
+→ **5 観測点すべて完全一致**。`${CLAUDE_PLUGIN_ROOT}` の hook command 内 resolution が壊れているのは install path 依存ではなく Cowork 共通制約。§2.1 / §2.2 を「Cowork 全 install 経路で成立」へ一般化できる。
+
+副次観察：`MARKER form=topbare` も `MARKER form=bashbrace` も marker.sh の echo が一切 surface しないので、**hook command の exec 失敗（"No such file" 等の /bin/bash stderr）は context に届かない**。失敗を観測したければ呼び出し側で `&&` / `||` の echo 哨戒を仕込んで明示的に弾く必要がある（後述「`&&` / `||` が動くようになった」と組み合わせる）。例：
+
+```json
+{ "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/marker.sh\" topbare && echo MARKER_topbare=ok || echo MARKER_topbare=fail" }
+```
+
+これなら exec 失敗時に `MARKER_topbare=fail` が surface して silent failure を可視化できる（top-level `&&`/`||` は本節下流で動作確認済み、`$?` 等の変数展開は依然 dead なので静的文字列のみ）。**ただし `cowork-mp-script-probe` の session-export 解析（後述 §2.2bis）で hook stderr / exitCode は debug ログに完全記録されることが分かったので、まず session-export を見るのが最速**。
+
+### モデル訂正：「`$` 抑止」ではなく「path 文脈だけ独自 substitution、それ以外は literal 素通し」（2026-05-29, session-export 解析）
+
+§2.2 冒頭の訂正で「top-level command は `/bin/sh` 実行されるが `$VAR` 展開だけ抑止される」と書いていたが、`cowork-mp-script-probe` の session-export zip（後述 §2.2bis）に残った hook attachment を見直すと、より正確には：
+
+| hook command (hooks.json literal) | session-export 内 stdout / stderr | 実 exec attempt | 何が起きたか |
+|---|---|---|---|
+| `echo MP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}` | stdout: `MP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}\r\n` | echo が走った | **`${CLAUDE_PLUGIN_ROOT}` が literal で残る** ＝ shell の env 展開が走っていない（走れば §2.1 通り empty で `MP_SCRIPT_ECHO_BARE=` に化けるはず） |
+| `echo 'MP_SCRIPT_ECHO_SQ=${CLAUDE_PLUGIN_ROOT}'` | stdout: `'MP_SCRIPT_ECHO_SQ=${CLAUDE_PLUGIN_ROOT}'\r\n`（single-quote 込み） | echo が走った | single-quote 残存（補助観察。これ単独だと logger の re-quote 仮説が排除できないが、ECHO_BARE と整合する） |
+| `"${CLAUDE_PLUGIN_ROOT}/hooks/marker.sh" topbare` | stderr: `/bin/bash: /hooks/marker.sh: No such file or directory`, exit 127 | bash が `/hooks/marker.sh` を exec しようとした | **path 先頭の `${CLAUDE_PLUGIN_ROOT}` だけ空文字列に置換された**（quote 剥がし + 置換、arg `topbare` は残った） |
+| `bash -c '"$CLAUDE_PLUGIN_ROOT/hooks/marker.sh" bashbrace'` | stderr: `/bin/bash: line 1: /hooks/marker.sh: ...`, exit 127 | inner bash が `/hooks/marker.sh` を exec しようとした | 外側は素通し、内側 bash の `$CLAUDE_PLUGIN_ROOT` 展開で empty に化けた |
+
+決定的観察：**ECHO_BARE の stdout に literal `${CLAUDE_PLUGIN_ROOT}` がそのまま残っている**。もし通常の shell が parse していたら、§2.1 で確定の通り `CLAUDE_PLUGIN_ROOT` が plugin-level hook 環境では空なので、env 展開で **`MP_SCRIPT_ECHO_BARE=`** に化けるはず。literal で残ったということは、`${...}` 部分が shell の手に渡る前に何らかの形で literal pass-through されている。
+
+補助観察として ECHO_SQ の single-quote も残存しているが、これだけでは「logger が再 quote した」可能性を排除できず disambiguator としては弱い。決定的なのは ECHO_BARE の literal `${...}` 残存。
+
+> ⚠ **ただし「shell が呼ばれていない」までは断言できない**。ありうるモデルは複数あり：
+> - (a) Claude Code launcher が shell を bypass し、自前トーカナイザで exec していて、`${VAR}` を path 先頭でだけ独自置換する
+> - (b) `bash -c "<command>"` 経由で呼ぶが、その前に launcher が `$` を escape し、`${CLAUDE_PLUGIN_ROOT}/` のような path 形だけ事前置換する
+>
+> ECHO_BARE / ECHO_SQ / topbare / bashbrace の 4 観測点では (a) も (b) も矛盾なく説明できる。**真の disambiguator** は次のような追加 probe：
+> - `echo MP_DQ="double-quoted"` — shell parse なら quote が消える、bypass なら残る
+> - `echo HOME_EXPANDS=$HOME` — `$HOME` は env が確実に値を持つので shell parse なら展開、bypass なら literal
+>
+> 切り分けまでは `cowork-mp-disambig-probe`（次節）で実機検証する予定。本節の (a)/(b) どちらに帰結しても**実用上の含意は同じ**（下記）なので、確定前でも下記方針は有効。
+
+いずれにせよ launcher のいる layer で起きていることは：
+
+1. **path 先頭の `${CLAUDE_PLUGIN_ROOT}/...` だけ独自に substitute**（事前置換）。値は Cowork plugin-level hook 環境では empty
+2. **それ以外の `${...}` / `$VAR` / quote 記号は literal のまま** child process まで届く（少なくとも echo の引数中では env 展開を経ていない）
+3. `bash -c '...'` で wrap した場合のみ、inner bash で通常の POSIX 展開が走る（env が空なので結果は empty に化けるが、機構自体は POSIX）
+
+実用上の含意：
+
+- **「Cowork は `$` を抑止する」は誤り**。実態は「launcher が path 形 `${CLAUDE_PLUGIN_ROOT}/...` だけ独自置換、それ以外は素通し」
+- 素通しの結果として echo の引数中の `${...}` は literal のまま表示される（shell 展開を経ていない）
+- 独自置換の **value は empty**（CLI では実 path だが Cowork plugin-level hook 環境ではそもそも `CLAUDE_PLUGIN_ROOT` が値を持たない、§2.1）
+- 結果として `"${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` は `/hooks/x.sh` に化けて起動失敗
+
+書き換え方針：**動的 path 解決は完全に諦め、静的 echo のみで context に情報を流す**設計にする。
+
+### §2.2bis hook 失敗のデバッグ：session-export zip（2026-05-29 新規）
+
+「Cowork で hook が silent に失敗する」というのは context への surface 観点では事実だが、**Claude Desktop は host 側に全 hook 実行の構造化記録を残している**。手段：
+
+1. Claude Desktop 上で対象 Cowork session を「Export Session」（メニュー or 設定経由で zip 落とす）
+2. zip 内の `<sessionId>.jsonl`（transcript）と `logs/cowork_host_loop_debug.log` を解析
+
+#### 観測される構造（transcript jsonl の hook attachment）
+
+各 hook command 実行ごとに 1 attachment が記録される：
+
+```json
+{
+  "type": "hook_non_blocking_error",
+  "hookName": "SessionStart:startup",
+  "hookEvent": "SessionStart",
+  "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/marker.sh\" topbare",
+  "stdout": "",
+  "stderr": "Failed with non-blocking status code: /bin/bash: /hooks/marker.sh: No such file or directory",
+  "exitCode": 127,
+  "durationMs": 1909
+}
+```
+
+成功時は `type: "hook_success"` で stdout が同様に記録される。**つまり context には surface しないだけで、全 stdout/stderr/exitCode は完全に記録されている**。
+
+attachment.type の値（観測済み）：
+- `hook_success` — exit 0
+- `hook_non_blocking_error` — exit 非 0、でも session 進行は止めない（non-blocking hook event の場合）
+
+#### 観測される構造（cowork_host_loop_debug.log）
+
+同じ情報が DEBUG ログ形式でも見える：
+
+```
+[DEBUG] Hooks: Checking first line for async: MP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}
+[DEBUG] Hook output does not start with {, treating as plain text
+[DEBUG] "Hook SessionStart:startup (SessionStart) success:\nMP_SCRIPT_ECHO_BARE=${CLAUDE_PLUGIN_ROOT}\r\n"
+[DEBUG] "Hook SessionStart:startup (SessionStart) error:\n/bin/bash: /hooks/marker.sh: No such file or directory\n"
+```
+
+`Read hooks.json for plugin <name>` で hook 読み込み元 path も見えるので、どの plugin install path で動いてるかも特定可能。
+
+#### 解析スニペット例（jq）
+
+```sh
+unzip -o session-export-*.zip -d /tmp/se/
+# 失敗 hook だけ
+jq -c 'select(.attachment.type=="hook_non_blocking_error") | .attachment | {command, exitCode, stderr}' \
+  /tmp/se/*.jsonl
+# 特定 plugin の全 hook
+jq -c 'select(.attachment.hookEvent != null and (.attachment.command|contains("PLUGIN_NAME"))) | .attachment' \
+  /tmp/se/*.jsonl
+```
+
+#### stderr の形が exec 失敗種別を教える
+
+| stderr の形 | 意味 |
+|---|---|
+| `/bin/bash: <path>: No such file or directory`（line prefix 無し） | top-level command の直接 exec が失敗（script-file mode に近い実行） |
+| `/bin/bash: line 1: <path>: No such file or directory`（"line 1:" あり） | `bash -c '...'` 内の inner bash が exec 失敗 |
+| `exit 127` | command not found 系全般 |
+
+#### 実用上の含意
+
+- **「Cowork hook はデバッグ不能」は誤り**。session-export zip で完全観測可能
+- 開発時のループ：probe 修正 → re-install → Cowork 起動 → 数 prompt 走らせる → Export Session → zip 中 jsonl を `jq` で grep
+- skill body と違って hook stdout/stderr は context に出さない設計だが、host 側には残る（隠蔽でなく分離）
+- session-export 自体に PII 等が含まれる可能性があるので、外部共有時は注意（transcript には会話本体も含まれる）
+
 ## 2.3 hook 実行シェルとシェル機能（§1.3 の Cowork 版）
 
 CLI も Cowork も hook 実行シェルは `/bin/sh`（host が WSL/Ubuntu なら dash）。§2.2 の訂正の通り、top-level command も Cowork で `/bin/sh` 実行される（`$VAR` 展開だけ抑止）ので、dash の機能制約は CLI と同じく効く。
