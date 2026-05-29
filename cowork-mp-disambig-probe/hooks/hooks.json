@@ -11,7 +11,11 @@
           { "type": "command", "command": "echo MP_DA_HOME_BRACE=${HOME}" },
           { "type": "command", "command": "echo MP_DA_PATH=$PATH" },
           { "type": "command", "command": "echo MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY" },
-          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_HOME=$HOME'" }
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_HOME=$HOME'" },
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_HOST=$(hostname)'" },
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_PATH=$PATH'" },
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_WSL_LIB=$([ -e /usr/lib/wsl/lib ] && echo present || echo absent)'" },
+          { "type": "command", "command": "bash -c 'echo MP_DA_BASH_MNT_C=$([ -d /mnt/c ] && echo present || echo absent)'" }
         ]
       }
     ]

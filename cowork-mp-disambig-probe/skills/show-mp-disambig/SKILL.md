@@ -6,7 +6,7 @@ user-invocable: true
 
 # show-mp-disambig
 
-このプラグインの plugin-level SessionStart hook が session 開始時に 8 種類のエントリを実行しています。直前の context（system-reminder / additional context / hook output として注入されたもの）から、以下のプレフィックスで始まる行を**全て一字一句そのまま**貼ってください。プレフィックスが見当たらない場合は「無し」と明記してください。
+このプラグインの plugin-level SessionStart hook が session 開始時に 12 種類のエントリを実行しています。直前の context（system-reminder / additional context / hook output として注入されたもの）から、以下のプレフィックスで始まる行を**全て一字一句そのまま**貼ってください。プレフィックスが見当たらない場合は「無し」と明記してください。
 
 - `MP_DA_CONTROL=` （変数なしの対照、必ず出るはず）
 - `MP_DA_DQ=` （`echo MP_DA_DQ="double-quoted"`）
@@ -16,6 +16,10 @@ user-invocable: true
 - `MP_DA_PATH=` （`echo MP_DA_PATH=$PATH`）
 - `MP_DA_NUL=` （`echo MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY`）
 - `MP_DA_BASH_HOME=` （`bash -c 'echo MP_DA_BASH_HOME=$HOME'`）
+- `MP_DA_BASH_HOST=` （`bash -c 'echo MP_DA_BASH_HOST=$(hostname)'`）
+- `MP_DA_BASH_PATH=` （`bash -c 'echo MP_DA_BASH_PATH=$PATH'`）
+- `MP_DA_BASH_WSL_LIB=` （`bash -c '... [ -e /usr/lib/wsl/lib ] ...'`）
+- `MP_DA_BASH_MNT_C=` （`bash -c '... [ -d /mnt/c ] ...'`）
 
 判定の見方：
 
@@ -35,5 +39,14 @@ user-invocable: true
 
 **控え（既知）**
 - `MP_DA_BASH_HOME=/home/...` → inner bash の展開で `$HOME` が解決（CLI でも Cowork でも展開できるはず。env を持ち込めれば）
+
+**Disambiguator D：hook の実行環境が WSL2 かどうか（bash -c 経由で env 展開させて確認）**
+top-level の `MP_DA_PATH` は Cowork では literal のままなので、WSL 固有パスは bash -c 版で見る：
+- `MP_DA_BASH_HOST=` → hostname。Windows のマシン名（例 `LAPTOP-...`）なら WSL2（WSL2 は既定で Windows マシン名を hostname にする）。`claude` なら Cowork VM。
+- `MP_DA_BASH_PATH=` → `/usr/lib/wsl/lib` や `/mnt/c/Users/...` を含んでいれば **WSL2 で実行された決定打**。
+- `MP_DA_BASH_WSL_LIB=present` → `/usr/lib/wsl/lib` が存在（WSL2 ディストロ内にしか無いパス）。
+- `MP_DA_BASH_MNT_C=present` → `/mnt/c` が存在（WSL の C: 自動マウント）。
+
+3 マーカー（`HOME=/home/<user>` + `WSL_LIB=present` + `MNT_C=present`、PATH に `/usr/lib/wsl/lib`）が揃えば「この hook は WSL2 Ubuntu で実行された」が再確認できる。逆に `WSL_LIB=absent` / `MNT_C=absent` / HOST=`claude` なら以前の結論を見直す材料になる。
 
 最後に各観測点の verdict を 1 行ずつ書いてください（例：「DQ: literal で残った → shell bypass / HOME: literal $HOME → 同上 / NUL: empty → 矛盾」など）。
