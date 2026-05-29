@@ -259,6 +259,23 @@ ECHO_BARE で env 展開ゼロが既に確定しているので、ここで HOME
 
 §22 と同じく Claude Desktop の Export Session → zip 中 `<sessionId>.jsonl` を `jq` で grep。各 hook entry の `command` / `stdout` / `exitCode` を確認すれば context 経由より厳密に観察できる（context 経路で missing しても zip には残る、§2.2bis）。
 
+#### 5. 実観測（2026-05-29, GUI marketplace install）
+
+8 観測点すべて `hook_success exit=0`。結果：
+
+| 観測点 | stdout | verdict |
+|---|---|---|
+| `MP_DA_CONTROL` | `static_marker_no_var` | hook surface ✓ |
+| `MP_DA_DQ` | `"double-quoted"` literal | shell parse 無し |
+| `MP_DA_DQ_INNER` | `hello-"middle"-world` literal | 同上 |
+| `MP_DA_HOME` | `$HOME` literal | **HOME は universally set なのに展開ゼロ。決定打** |
+| `MP_DA_HOME_BRACE` | `${HOME}` literal | 同上、brace 形でも展開ゼロ |
+| `MP_DA_PATH` | `$PATH` literal | 同上 |
+| `MP_DA_NUL` | `$NO_SUCH_VAR_EXPECT_EMPTY` literal | unset でも literal、shell ならここは empty 化けるはず |
+| `MP_DA_BASH_HOME`（bash -c wrap） | `/home/kazukinagata` 実値 | 内側 bash でだけ POSIX 展開 |
+
+**結論**：「Cowork 自体で top-level command の shell parse は走らない」が**確定**（HOME / PATH / NUL の 3 重 literal）。実装が (a) shell bypass か (b) bash -c + aggressive escape か**観測上は区別不能**だが、実用効果は完全同一。詳細は `docs/team-report.md` §2.2 末尾に追記。
+
 ## 5. 結果記録
 
 各 probe の結果を `findings/v2.1.143/cowork-report.md` に手書きで記録。テンプレート：

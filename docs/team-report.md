@@ -1431,15 +1431,36 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 
 補助観察として ECHO_SQ の single-quote も残存しているが、これだけでは「logger が再 quote した」可能性を排除できず disambiguator としては弱い。決定的なのは ECHO_BARE の literal `${...}` 残存。
 
-> ⚠ **ただし「shell が呼ばれていない」までは断言できない**。ありうるモデルは複数あり：
-> - (a) Claude Code launcher が shell を bypass し、自前トーカナイザで exec していて、`${VAR}` を path 先頭でだけ独自置換する
-> - (b) `bash -c "<command>"` 経由で呼ぶが、その前に launcher が `$` を escape し、`${CLAUDE_PLUGIN_ROOT}/` のような path 形だけ事前置換する
->
-> ECHO_BARE / ECHO_SQ / topbare / bashbrace の 4 観測点では (a) も (b) も矛盾なく説明できる。**真の disambiguator** は次のような追加 probe：
-> - `echo MP_DQ="double-quoted"` — shell parse なら quote が消える、bypass なら残る
-> - `echo HOME_EXPANDS=$HOME` — `$HOME` は env が確実に値を持つので shell parse なら展開、bypass なら literal
->
-> 切り分けまでは `cowork-mp-disambig-probe`（次節）で実機検証する予定。本節の (a)/(b) どちらに帰結しても**実用上の含意は同じ**（下記）なので、確定前でも下記方針は有効。
+### 追検証：disambig probe で「shell parse 不在」を確定（2026-05-29, `cowork-mp-disambig-probe/`）
+
+§2.2 のモデル訂正では「(a) shell bypass / (b) bash -c + `$`/`"` aggressive escape」のどちらか不明と保留していた。`cowork-mp-disambig-probe` で 8 観測点を仕込んで GUI marketplace install 経路で実機検証した結果（session-export zip 解析）：
+
+| hooks.json command | session-export stdout | 評価 |
+|---|---|---|
+| `echo MP_DA_CONTROL=static_marker_no_var` | `MP_DA_CONTROL=static_marker_no_var\r\n` | 静的、surface 確認 |
+| `echo MP_DA_DQ="double-quoted"` | `MP_DA_DQ="double-quoted"\r\n` | **double-quote literal 残存** |
+| `echo MP_DA_DQ_INNER=hello-"middle"-world` | `MP_DA_DQ_INNER=hello-"middle"-world\r\n` | **inner quote も literal** |
+| `echo MP_DA_HOME=$HOME` | `MP_DA_HOME=$HOME\r\n` | **`$HOME` literal**（HOME は env に必ず値ある変数） |
+| `echo MP_DA_HOME_BRACE=${HOME}` | `MP_DA_HOME_BRACE=${HOME}\r\n` | brace 形も literal |
+| `echo MP_DA_PATH=$PATH` | `MP_DA_PATH=$PATH\r\n` | **`$PATH` literal** |
+| `echo MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY` | `MP_DA_NUL=$NO_SUCH_VAR_EXPECT_EMPTY\r\n` | **unset var が literal**（shell parse なら empty 化けるはず） |
+| `bash -c 'echo MP_DA_BASH_HOME=$HOME'` | `MP_DA_BASH_HOME=/home/kazukinagata\n` | **inner bash でのみ POSIX 展開**（line ending も `\n` のみ） |
+
+**確定事項**：
+
+1. **top-level command で shell parser は走っていない**。決定打 3 つ：
+   - `$HOME` literal：HOME は universally set。shell parse なら確実に展開される
+   - `$PATH` literal：同上
+   - `$NO_SUCH_VAR_EXPECT_EMPTY` literal：shell parse 経由なら unset → empty 化けて `MP_DA_NUL=` になるはず。literal で残った
+2. **double-quote も consume されない**：shell parse 経由なら quote は剥がれる。残ったので no parsing 確定
+3. **`bash -c '...'` wrap した内側は通常の POSIX bash**：`MP_DA_BASH_HOME=/home/kazukinagata` で実値展開
+
+**未確定事項**：実装が以下のどちらかは観測上区別不能：
+
+- **(a) shell bypass**：launcher 自前のトーカナイザで exec、shell が完全に介在しない（ただし topbare の stderr `/bin/bash: /hooks/marker.sh: ...` を見ると、少なくとも exec の最終段で bash は関与している）
+- **(b) bash -c with aggressive escape**：すべての `$` / `"` を `\$` / `\"` に escape してから `bash -c '<escaped>'` に渡す。escape 後の bash 動作は (a) と区別不能
+
+(a)/(b) いずれも結果は同じで、**実用上は等価**：「top-level command で `$VAR`・`${VAR}`・`"..."` は全部 literal、唯一 `${CLAUDE_PLUGIN_ROOT}/<path>` だけ launcher が path 先頭で独自に pre-sub（値は Cowork plugin-level hook 環境では empty）」。これ以上の disambiguation は launcher 実装ソースを見ない限り無理。
 
 いずれにせよ launcher のいる layer で起きていることは：
 
