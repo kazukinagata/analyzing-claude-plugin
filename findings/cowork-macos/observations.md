@@ -7,7 +7,7 @@ probe 出力を一字一句、改変なしで時系列に貼る場所. 解釈は
 ## OBS-1 — `cowork-mp-script-probe:show-mp-script`
 
 - 日時: 2026-05-29
-- 環境: macOS Claude Desktop / Cowork, host=`KazukinoMacBook-Pro.local`
+- 環境: macOS Claude Desktop / Cowork, host=`<mac-host>.local`
 - install 経路: 推定 inline/zip（data dir 接尾辞 `-inline`. GUI marketplace 経路は未確認）
 - 取得元: SessionStart:resume hook output（context 注入分）
 
@@ -15,8 +15,8 @@ probe 出力を一字一句、改変なしで時系列に貼る場所. 解釈は
 MP_SCRIPT_CONTROL=static_marker_no_var
 MP_SCRIPT_ECHO_SQ=${CLAUDE_PLUGIN_ROOT}
 MP_SCRIPT_ECHO_BARE=/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210
-MP_SCRIPT_MARKER form=bashbrace reached=yes argv0=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210/hooks/marker.sh] ROOT_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210] DATA_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/a8730419d9c8ad74/plugins/data/cowork-mp-script-probe-inline] HOST=[KazukinoMacBook-Pro.local]
-MP_SCRIPT_MARKER form=topbare reached=yes argv0=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210/hooks/marker.sh] ROOT_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210] DATA_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/a8730419d9c8ad74/plugins/data/cowork-mp-script-probe-inline] HOST=[KazukinoMacBook-Pro.local]
+MP_SCRIPT_MARKER form=bashbrace reached=yes argv0=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210/hooks/marker.sh] ROOT_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210] DATA_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/a8730419d9c8ad74/plugins/data/cowork-mp-script-probe-inline] HOST=[<mac-host>.local]
+MP_SCRIPT_MARKER form=topbare reached=yes argv0=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210/hooks/marker.sh] ROOT_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/66135c2b7384a210] DATA_ENV=[/var/folders/ph/w5mkk5d94cb_jjvzcv_g9pdc0000gn/T/claude-hostloop-plugins/a8730419d9c8ad74/plugins/data/cowork-mp-script-probe-inline] HOST=[<mac-host>.local]
 ```
 
 補足（ユーザ確認済み）:
@@ -42,7 +42,7 @@ MP_DA_HOME_BRACE=/Users/kazukinagata
 MP_DA_PATH=/Users/kazukinagata/.nvm/versions/node/v24.15.0/bin:/Users/kazukinagata/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin
 MP_DA_NUL=
 MP_DA_BASH_HOME=/Users/kazukinagata
-MP_DA_BASH_HOST=KazukinoMacBook-Pro.local
+MP_DA_BASH_HOST=<mac-host>.local
 MP_DA_BASH_PATH=（top-level PATH と同一）
 MP_DA_BASH_WSL_LIB=absent
 MP_DA_BASH_MNT_C=absent
@@ -52,7 +52,7 @@ verdict（全点 surface, exit 0 想定）:
 - DQ / DQ_INNER: quote 消費 → **top-level で shell parser が走っている**
 - HOME / HOME_BRACE / PATH: 実値展開 → **env 展開あり**
 - NUL: `$NO_SUCH_VAR_EXPECT_EMPTY` → **empty**（literal ではない）= shell が unset を空に展開
-- BASH_HOST: `KazukinoMacBook-Pro.local`（VM の `claude` ではない）= hook は **macOS host 側**
+- BASH_HOST: `<mac-host>.local`（VM の `claude` ではない）= hook は **macOS host 側**
 - WSL_LIB / MNT_C: **absent** = WSL2 中間層は無い
 - PATH に `/opt/homebrew/bin`・`.nvm/.../v24.15.0/bin` = **ユーザの macOS ログインシェル env をそのまま継承**
 
@@ -68,7 +68,7 @@ verdict（全点 surface, exit 0 想定）:
 
 plugin-level SessionStart hook（ホスト側, 毎回発火）:
 ```
-[PLUGIN-HOOK SessionStart] ROOT=[/var/folders/.../bccbb369fc252947] DATA=[/var/folders/.../cowork-env-probe-inline] PROJECT=[.../outputs] ENTRY=[local-agent] HOST=[KazukinoMacBook-Pro.local]
+[PLUGIN-HOOK SessionStart] ROOT=[/var/folders/.../bccbb369fc252947] DATA=[/var/folders/.../cowork-env-probe-inline] PROJECT=[.../outputs] ENTRY=[local-agent] HOST=[<mac-host>.local]
 ```
 
 skill body の Bash tool（VM 側）:
@@ -100,7 +100,7 @@ verdict:
 
 - 日時: 2026-05-29 / 環境: macOS Claude Desktop / Cowork
 
-SessionStart hook（host 側）: `[FS-HOOK] wrote /tmp/cowork-fs-canary.txt on host=KazukinoMacBook-Pro.local`
+SessionStart hook（host 側）: `[FS-HOOK] wrote /tmp/cowork-fs-canary.txt on host=<mac-host>.local`
 
 skill body の Bash tool（VM 側）:
 ```
@@ -112,7 +112,7 @@ ls: cannot access '/tmp/cowork-fs-canary.txt': No such file or directory
 ```
 
 verdict:
-- hook host = `KazukinoMacBook-Pro.local`（macOS）/ Bash tool host = `claude`（VM）。
+- hook host = `<mac-host>.local`（macOS）/ Bash tool host = `claude`（VM）。
 - hook が書いた `/tmp/cowork-fs-canary.txt` を Bash tool から `cat`/`ls` できない（別 filesystem namespace）。
 - → **§4「hook と Bash tool は完全に別の filesystem」は Mac でも成立。✅ SAME（確定）**。
   filesystem 分割は OS 非依存の Cowork アーキ（host hook / host-adjacent VM）由来であり、
@@ -127,7 +127,7 @@ verdict:
 
 SessionStart hook output（host 側, context 注入）:
 ```
-[DIAG-ENVFILE] CLAUDE_ENV_FILE=[/var/folders/ph/.../T/claude-hostloop-plugins/c6add37781fbc3b4/session-env/53b52a06-aaa0-4535-b48e-d5f2621f2921/sessionstart-hook-0.sh] host=KazukinoMacBook-Pro.local
+[DIAG-ENVFILE] CLAUDE_ENV_FILE=[/var/folders/ph/.../T/claude-hostloop-plugins/c6add37781fbc3b4/session-env/53b52a06-aaa0-4535-b48e-d5f2621f2921/sessionstart-hook-0.sh] host=<mac-host>.local
 [DIAG-MULTI] line1 — あり
 [DIAG-MULTI] line2 — あり
 ```
@@ -256,7 +256,7 @@ verdict（**確定**）:
   → Windows（redirect トークンの存在だけで hook 丸ごと非 surface, team-report §2.8 footgun）とは **❌ DIVERGES**。
   redirect footgun は **Windows host loop 実装固有**のアーティファクトで、Mac の host loop には無い。
 - V5 が then2（=`$CLAUDE_ENV_FILE` 非空）→ OBS-5 の「`CLAUDE_ENV_FILE` は Mac で set」を再確認。
-- hook host=`KazukinoMacBook-Pro.local` / Bash tool host=`claude` も再確認（2層）。
+- hook host=`<mac-host>.local` / Bash tool host=`claude` も再確認（2層）。
 
 ---
 
