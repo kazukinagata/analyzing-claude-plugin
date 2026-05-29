@@ -276,6 +276,20 @@ ECHO_BARE で env 展開ゼロが既に確定しているので、ここで HOME
 
 **結論**：「Cowork 自体で top-level command の shell parse は走らない」が**確定**（HOME / PATH / NUL の 3 重 literal）。実装が (a) shell bypass か (b) bash -c + aggressive escape か**観測上は区別不能**だが、実用効果は完全同一。詳細は `docs/team-report.md` §2.2 末尾に追記。
 
+#### 6. 追加観測（2026-05-29, WSL2 実行環境の再確認）
+
+hook が WSL2 で実行されている事実を新規 chat で再確認するため、`bash -c` でラップした 4 マーカーを追加（top-level の `$PATH` は literal で WSL パスを拾えないため）：
+
+| 観測点 | stdout | verdict |
+|---|---|---|
+| `MP_DA_BASH_HOME`（再掲） | `/home/kazukinagata` | WSL2 Ubuntu のホーム |
+| `MP_DA_BASH_HOST` | `LAPTOP-BKGB6100` | WSL2 既定 hostname（=Windows マシン名） |
+| `MP_DA_BASH_PATH` | `/usr/lib/wsl/lib`・`/mnt/c/Users/knaga/...` を含む | **WSL2 限定パス。決定打** |
+| `MP_DA_BASH_WSL_LIB` | `absent)'` のみ（prefix 欠落） | **probe 作成ミス**。`$()`+`&&`+`||`+quote の混在を Cowork の top-level 処理が分断したアーティファクト。WSL の有無とは無関係 |
+| `MP_DA_BASH_MNT_C` | 同上 | 同上 |
+
+**結論**：`MP_DA_BASH_PATH` に `/usr/lib/wsl/lib` が含まれる時点で「hook は WSL2 Ubuntu で実行された」は確定（`WSL_LIB`/`MNT_C` 行は壊れたが PATH で代替できるので再実行不要）。ただしこれは Windows+WSL2 という本検証機固有の事実であり、Cowork の WSL 依存を意味しない（`docs/team-report.md` 冒頭「検証環境の前提」§2.0）。`$()`/`||` を含む複雑な hook command は Cowork で壊れる、という副次的な注意点も得られた。
+
 ## 5. 結果記録
 
 各 probe の結果を `findings/v2.1.143/cowork-report.md` に手書きで記録。テンプレート：
