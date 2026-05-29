@@ -97,6 +97,11 @@
       "name": "cowork-bodypath-probe",
       "source": "./cowork-bodypath-probe",
       "description": "Tests skill-body ${CLAUDE_PLUGIN_ROOT} substitution value on Mac Cowork, whether the VM Bash tool can use it, and whether the Read tool can read a bundled file at that host path (article section 3)."
+    },
+    {
+      "name": "cowork-exec-form-probe",
+      "source": "./cowork-exec-form-probe",
+      "description": "Tests hook command exec form (args present) on Cowork: whether ${CLAUDE_PLUGIN_ROOT} resolves to a real path via launcher text pre-substitution vs env-var export, where shell form (§2.1/§2.2) failed both."
     }
   ]
 }
