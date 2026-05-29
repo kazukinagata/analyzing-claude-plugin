@@ -87,6 +87,11 @@
       "name": "cowork-mp-disambig-probe",
       "source": "./cowork-mp-disambig-probe",
       "description": "Disambiguator probe. Adds double-quote and $HOME observation points to settle whether Cowork hook command runtime is (a) shell-bypassed launcher or (b) bash -c with $-escape + path-prefix pre-sub."
+    },
+    {
+      "name": "cowork-fm-bashblock-probe",
+      "source": "./cowork-fm-bashblock-probe",
+      "description": "Proves whether a skill frontmatter PreToolUse:Bash hook fires on Cowork by emitting only a block decision (no echo). Mac re-verification of frontmatter hook behavior."
     }
   ]
 }

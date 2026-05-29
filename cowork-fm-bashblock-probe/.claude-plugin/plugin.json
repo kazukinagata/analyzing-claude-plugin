@@ -1,0 +1,6 @@
+{
+  "name": "cowork-fm-bashblock-probe",
+  "version": "0.1.0",
+  "description": "Tests whether a skill frontmatter PreToolUse:Bash hook FIRES on Cowork by emitting a block decision (no echo). If a marked bash is blocked even though frontmatter hook stdout never surfaces, it proves the frontmatter hook fires and only its stdout is suppressed.",
+  "author": { "name": "kazukinagata" }
+}
