@@ -1,0 +1,6 @@
+{
+  "name": "cowork-exec-form-probe",
+  "version": "0.1.0",
+  "description": "Tests hook command EXEC FORM (args present) on Cowork. Shell-form probes (§2.1/§2.2) found CLAUDE_PLUGIN_ROOT empty and ${...} not resolving to a real path. Docs claim exec form substitutes path placeholders into command/args as plain strings AND exports them as env vars. This probe separates the two mechanisms: launcher text pre-substitution of ${CLAUDE_PLUGIN_ROOT} in an args element vs env-var export to the spawned process.",
+  "author": { "name": "kazukinagata" }
+}

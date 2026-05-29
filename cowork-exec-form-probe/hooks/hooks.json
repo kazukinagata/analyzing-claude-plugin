@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "bash", "args": ["-c", "echo EXEC_CONTROL=static_no_var"] },
+          { "type": "command", "command": "bash", "args": ["-c", "echo EXEC_ARGS_PLACEHOLDER=[$1]", "_", "${CLAUDE_PLUGIN_ROOT}"] },
+          { "type": "command", "command": "bash", "args": ["-c", "echo \"EXEC_ENV_ROOT=[$(printenv CLAUDE_PLUGIN_ROOT)] EXEC_ENV_DATA=[$(printenv CLAUDE_PLUGIN_DATA)] EXEC_ENV_PROJ=[$(printenv CLAUDE_PROJECT_DIR)]\""] },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh", "args": ["execdirect"] },
+          { "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh", "execbash"] },
+          { "type": "command", "command": "echo", "args": ["EXEC_ECHO_BUILTIN=reached"] },
+          { "type": "command", "command": "bash", "args": ["-c", "echo EXEC_HOST=$(hostname) EXEC_WSL_LIB=$([ -e /usr/lib/wsl/lib ] && echo present || echo absent) EXEC_MNT_C=$([ -d /mnt/c ] && echo present || echo absent)"] }
+        ]
+      }
+    ]
+  }
+}
