@@ -92,6 +92,11 @@
       "name": "cowork-fm-bashblock-probe",
       "source": "./cowork-fm-bashblock-probe",
       "description": "Proves whether a skill frontmatter PreToolUse:Bash hook fires on Cowork by emitting only a block decision (no echo). Mac re-verification of frontmatter hook behavior."
+    },
+    {
+      "name": "cowork-bodypath-probe",
+      "source": "./cowork-bodypath-probe",
+      "description": "Tests skill-body ${CLAUDE_PLUGIN_ROOT} substitution value on Mac Cowork, whether the VM Bash tool can use it, and whether the Read tool can read a bundled file at that host path (article section 3)."
     }
   ]
 }

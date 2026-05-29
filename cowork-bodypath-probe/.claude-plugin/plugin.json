@@ -1,0 +1,6 @@
+{
+  "name": "cowork-bodypath-probe",
+  "version": "0.1.0",
+  "description": "Tests what skill-body ${CLAUDE_PLUGIN_ROOT}/${CLAUDE_PLUGIN_DATA}/${CLAUDE_SKILL_DIR} substitute to on Mac Cowork (host path format), whether the VM Bash tool can use that path, and whether the Read tool can read a bundled file at that host path.",
+  "author": { "name": "kazukinagata" }
+}

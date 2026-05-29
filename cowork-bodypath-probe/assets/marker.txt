@@ -1,0 +1,1 @@
+BODYPATH-MARKER-FILE-CONTENT (bundled in the plugin install dir; if you can read this via the Read tool at the substituted ${CLAUDE_PLUGIN_ROOT}/assets/marker.txt host path, the Read-tool-can-read-host-path claim holds)
