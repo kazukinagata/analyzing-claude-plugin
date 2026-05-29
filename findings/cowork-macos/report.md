@@ -112,7 +112,7 @@ MP_SCRIPT_MARKER form=topbare  reached=yes argv0=[/var/folders/ph/.../T/claude-h
 - **hook(ホスト=macOS) と Bash tool(VM=`claude`) が別 filesystem namespace** という分割は Mac でも残る
   （fs-probe で確定: hook が書いた `/tmp` を Bash tool は読めない）. これは OS 非依存の Cowork アーキ由来.
 - `mcp__workspace__bash` という tool 名・VM 側機構も Mac で同じ（blockmethods で確定）.
-- frontmatter hook は Mac で **発火する**（fm-bashblock で直接証明）が **stdout は surface せず block 決定のみ honor**.
+- frontmatter hook は Mac で **発火し block 決定も honor される**（fm-bashblock で直接証明）. ※ `PreToolUse` hook の stdout がそもそも context に出ないのは **Claude Code の公式仕様（全 OS / CLI 共通**。context に入るのは SessionStart / UserPromptSubmit / UserPromptExpansion のみ）なので、発火は echo ではなく block で判定する.
 
 > ⚠ caveat: 観測された data dir は `cowork-mp-script-probe-inline`（`-inline` 接尾辞）で、
 > **inline / zip 経路の install** の可能性が高い（team-report §2.6: inline install の data dir 命名）.
@@ -129,7 +129,7 @@ MP_SCRIPT_MARKER form=topbare  reached=yes argv0=[/var/folders/ph/.../T/claude-h
 |---|---|---|---|---|
 | 前提 | Cowork は host/VM の 2 段、hook は host 側 | host=WSL2(3層), hostname=Win名 | **❌ DIVERGES（確定）**: hook=macOS ネイティブ host(2層, hostname=Mac名), Bash tool=VM(`claude`) | mp-script ✅ / env-probe ✅ |
 | §1 | 環境変数の伝播が大幅欠落（`CLAUDE_PLUGIN_*` 消失） | UNSET | **❌ DIVERGES（確定）**: plugin-level hook は ROOT/DATA/PROJECT 実値, `ENTRY=local-agent`. body(Bash tool)は CLI 同様 unset | mp-script ✅ / env-probe ✅ |
-| §5前提 | frontmatter hook は Cowork で発火しない | 不発（stdout も block も） | **❌ DIVERGES（直接証明・確定）**: frontmatter hook は **発火する**. ただし **(a) stdout は context に surface しない**, **(b) block 決定は fresh session で honor**（resume で失効）. fm-bashblock probe で echo 無し block が成立し直接証明 | env-probe ✅ / block-probe ✅ / **fm-bashblock ✅** |
+| §5前提 | frontmatter hook は Cowork で発火しない | 不発（block も効かない） | **❌ DIVERGES（直接証明・確定）**: frontmatter hook は **発火し block も honor**（fresh session / resume で失効）. ※ echo が見えないのは `PreToolUse` stdout が context に行かない**公式仕様**（全OS共通）ゆえで、発火は block で判定. fm-bashblock probe で実証 | env-probe ✅ / block-probe ✅ / **fm-bashblock ✅** |
 | §2 | hook の `${VAR}` が二重に壊れる（top-level `$`抑止 + env空） | literal + 空 | **❌ DIVERGES（多点確定）**: top-level で `$HOME`/`$PATH`/unset/quote すべて通常 shell parse + env 展開, script 起動成功 | mp-script ✅ / disambig ✅ / presub 🔬 / expansion 🔬 |
 | §3 | skill body の `${CLAUDE_PLUGIN_ROOT}` がホストパスに化ける | Windows path 埋め込み(Bash不可/Read可) | **✅ SAME（構造）/ 形式のみ DIVERGES**: macOS host path（`/var/folders/.../claude-hostloop-plugins/<hash>`）に事前置換. VM Bash 不可・Read tool 可も同じ. 違いはパス形式だけ | bodypath ✅ |
 | §4 | hook と Bash tool の filesystem は完全に別 | 別 namespace, `CLAUDE_ENV_FILE` も空, redirect footgun あり | **✅ SAME（filesystem分割）/❌ DIVERGES（細部）**: 分割は確定. `CLAUDE_ENV_FILE` は **Mac では set**（Win空）だが VM 分離で届かず結果同. **redirect footgun は Mac で起きない**（V4/V5 も surface, Win 固有） | fs-probe ✅ / envfile ✅ / surface ✅ |
@@ -203,13 +203,16 @@ userConfig を settings.json 手動注入したとき Mac の hook env に届く
 - **§5 plugin-level PreToolUse block**（decision / permissionDecision / exit2 の 3 方式とも honor）.
 - **§6 Bash tool 名 `mcp__workspace__bash`**（matcher 両対応が必要なのは同じ）.
 - **§7 userConfig 入力 UI 不在 / unset entry の silent skip / 機密 body block 文字列**.
-- **frontmatter hook の stdout が context に surface しない**（発火はする. これは Mac/Win 共通の Cowork 制約）.
+- **`PreToolUse` hook の stdout は context に渡らない**（発火はする）. これは Cowork 固有ではなく **Claude Code の公式仕様で全 OS / CLI 共通**（context に stdout が入るのは SessionStart / UserPromptSubmit / UserPromptExpansion のみ）.
 
 ### 5.4 重要な再解釈（このレポートで判明）
 
 - 「Cowork で frontmatter hook は発火しない」（team-report §2.9）は、Windows の観測では正しいが **Mac には当てはまらない**.
   Mac では **frontmatter hook は発火し block 決定も honor される**（fm-bashblock probe で echo 無し block を直接確認）.
-  ただし **stdout は surface しない**ので echo ベースの観測では「不発」に見える. **「発火しない」と「stdout が出ない」は別物**.
+  当初「不発」に見えた真因は、**`PreToolUse` hook の stdout がそもそも context に渡らない公式仕様**
+  （[hooks docs](https://code.claude.com/docs/en/hooks): stdout が context に入るのは SessionStart / UserPromptSubmit / UserPromptExpansion のみ。`PreToolUse` は debug log 行き）を取り違え、echo の有無で発火を判定していたこと.
+  **発火の有無は echo ではなく block で判定すべき**で、それで見ると Mac=発火 / Windows=不発.
+  つまり「echo が context に出ない」（OS 非依存の仕様）と「block が honor される」（OS 依存の事実）を切り分けて初めて正しく読める.
 - frontmatter block は **resume を跨ぐと登録が失効**（block-probe で確認）. 長期 guard を frontmatter に置くべきでないのは
   Mac/Win 共通の結論だが、理由が違う（Win=そもそも効かない / Mac=効くが resume で消える）.
 

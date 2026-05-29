@@ -92,7 +92,9 @@ verdict:
 - **PROJECT=.../outputs**: Cowork では `CLAUDE_PROJECT_DIR` が outputs ディレクトリを指す。
 - **body（Bash tool）**: 全 env unset・`HOST=claude` = VM。CLI の tier-3 と同じく Bash tool は plugin env を持たない。
   さらに hook の `HOST=Mac名` と body の `HOST=claude` が違う → **hook(macOS host)/Bash tool(VM) の 2 層分離は Mac でも存在**（§4 が SAME 寄りである強い傍証。fs-probe で最終確定）。
-- **frontmatter hook**: Mac でも発火 / surface しない → **✅ SAME（Windows と同じ, team-report §2.9 / 記事 §5 frontmatter は Mac でも成立）**。
+- **frontmatter hook**: SessionStart/PreToolUse とも echo が context に出ず。**ただしこれは「発火していない」証拠ではない**
+  （`PreToolUse` の stdout は公式仕様で context に行かない／frontmatter SessionStart は §1.8 の登録タイミングで発火機会を逃す）。
+  実際には **発火している**ことを OBS-8 で別途確定（block で判定）。← 当初ここを「発火しない＝SAME」と誤読していた（OBS-8 で訂正）。
 
 ---
 
@@ -212,9 +214,8 @@ verdict（OBS-7 + OBS-7b 合わせて確定）:
 - → **§5 frontmatter block: Mac は fresh session で効く（CLI §1.11 と同じ）/ resume で失効。Windows（常に不発）とは ❌ DIVERGES**。
 - 残る微小な未確定: 「同一 fresh session 内で victim を **2 回目**起動しても block が持続するか」は未取得
   （各 session とも 1 回目で確認）。ただし fresh 2 連続成功 + resume 1 回失敗から、失効トリガは resume と判断。
-- **STEP 2/OBS-3 の修正確定**: 「frontmatter hook は Mac でも発火しない」は誤り。正しくは
-  **「frontmatter hook の stdout は context に surface しないが、block 決定は fresh session で honor される」**。
-  env-probe の `[FRONTMATTER-*]` echo が出なかったのは stdout 非 surface のため（発火していなかったわけではない）。
+- **STEP 2/OBS-3 の修正**: 「frontmatter hook は Mac でも発火しない」は誤り。発火は **block で判定**すべき（OBS-8 で確定）。
+  echo が出ないのは `PreToolUse` の stdout が context に行かない公式仕様ゆえで、発火の有無とは無関係（詳細は OBS-8 のドキュメント照合）。
 
 ---
 
@@ -229,13 +230,13 @@ verdict（OBS-7 + OBS-7b 合わせて確定）:
 | control | `echo "FM-CONTROL ran ... host=$(hostname)"`（マーカー無し） | 実行 `FM-CONTROL ran (should run) host=claude` |
 
 verdict（**確定**）:
-- marked がブロック + control が実行 → **frontmatter PreToolUse:Bash hook は Mac Cowork で発火し、block 決定が honor される**。
-- hook は echo を一切していない（block JSON のみ）ので、**stdout 非 surface でも制御は効く**ことが直接証明された。
-- → **STEP 2 / OBS-3 の再解釈が確定**:
-  「frontmatter hook は Mac でも発火する。ただし **(a) stdout は context に surface しない**（env-probe の echo が出ない真因）、
-  **(b) block 決定（制御）は fresh session で honor される**」。
-  env-probe で `[FRONTMATTER-*]` が見えなかったのは「発火しなかった」のではなく「stdout が注入経路に乗らない」ため.
-- Windows（frontmatter hook は stdout も block も効かない＝完全不発, team-report §2.9/§2.10）とは **❌ DIVERGES**。
+- marked がブロック + control が実行 → **frontmatter PreToolUse:Bash hook は Mac Cowork で発火し、block 決定が honor される**（echo 無しでも block が効く＝制御は走っている）。
+- **ドキュメント照合（2026-05-29, [hooks docs](https://code.claude.com/docs/en/hooks)）**: `PreToolUse` hook の stdout は **どの OS / CLI でも context に渡らない**
+  （context に入るのは SessionStart / UserPromptSubmit / UserPromptExpansion のみ。`PreToolUse` は debug log 行き）。
+  よって env-probe で `[FRONTMATTER-PreToolUse]` echo が出なかったのは **公式仕様どおり**であり、Cowork/macOS 固有でも「発火していない」証拠でもない。
+- → **STEP 2 / OBS-3 の再解釈（確定版）**: frontmatter hook の発火は **echo では判定できない**（stdout が元々 context に行かない）。
+  **block で判定**すると **Mac=発火（本 probe）/ Windows=不発**。これが OS 依存の本当の差分。
+- Windows（frontmatter hook は block すら効かない＝実質機能せず, team-report §2.9/§2.10）とは **❌ DIVERGES**。
 
 ---
 
