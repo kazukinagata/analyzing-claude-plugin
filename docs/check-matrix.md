@@ -27,7 +27,7 @@
 | §1.11 | 二層 trust モデル | (設計指針) | probe なし、設計文書化 | — |
 | §2.1 | Cowork SessionStart resume 再発火 | 19 | hooks.log に `source=resume` 行が追加 | [CW] |
 | §2.2 | Cowork userConfig 欠落 | 05 + cowork-runbook | UI 自体無し、disable→enable / `/plugins` 不在、silent skip | [CLI]+[CW] |
-| §2.3 | Cowork hook validation 差 | 20 | UserPromptExpansion 入り plugin → Cowork で `Plugin validation failed`、CLI で具体エラー | [CW] |
+| §2.3 | Cowork hook validation 差 | 20 | UserPromptExpansion 入り plugin → Cowork で `Plugin validation failed`、CLI で具体エラー（2026-05-30 更新: GUI marketplace 経由では両 OS で install 成功・UPE 発火、§2.3bis。reject は zip-upload／旧版限定の可能性） | [CW] |
 | §2.4 | Cowork bash = `mcp__workspace__bash` | 13 | tool_name の確認、`pretool-mcp-workspace-bash` 発火 | [CW] |
 | §2.5 | Cowork plugin-level PreToolUse 死亡 | 13 | block されず `TEST_BASH_OK_MARKER` が出る | [CW] |
 | §2.6 / §7.10 / §7.11 | Cowork parser whitelist | 14 | `&&` `||` `cat`/`printf`/`sh -c` 分断、`echo` `bash -c` だけ通る | [CW] |

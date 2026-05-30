@@ -857,7 +857,7 @@ echo "bash-guard armed"
 | `Skill` tool が呼ばれる | ✅ | ❌ |
 | `PreToolUse:Skill` 発火 | ✅ | ❌ |
 | `UserPromptSubmit` 発火 | ✅ | ✅ |
-| `UserPromptExpansion` 発火（CLI のみ） | ❌ | ✅ |
+| `UserPromptExpansion` 発火（CLI / Cowork とも、§2.3bis） | ❌ | ✅ |
 
 ### 実装例：どの hook が発火するかを観測する
 
@@ -2422,10 +2422,30 @@ CLI の `claude plugin validate` で warning のみで通る違反項目を、Co
 | 3 | YAML single-quoted string の closing quote 漏れ | ✅ forgiving parser が受理 | ❌ strict parser が reject |
 | 4 | skill `description:` 内の `${CLAUDE_*}` substitution markers | ✅ | ❌ reject |
 | 5 | skill `description:` 内の `<...>` angle brackets | ✅ | ❌ reject |
-| 6 | `UserPromptExpansion` event entry | ✅ | ❌ reject |
+| 6 | `UserPromptExpansion` event entry | ✅ | ⚠ **要更新**（旧: reject。2026-05-30 GUI marketplace 経由では Windows/macOS とも install 成功＋発火、§2.3bis） |
 | 7 | skill body / frontmatter command content の累積 threshold | ✅ | ❌（具体閾値未特定） |
 
 すべて **`Plugin validation failed`** の generic メッセージで返ってくる。理由表示なし。
+
+### §2.3bis 追検証：UserPromptExpansion は install 可・発火する（2026-05-30, `cowork-upe-probe/`、Windows + macOS）
+
+上表 #6「`UserPromptExpansion` event は Cowork validator が reject」は **zip-upload 経路・旧バージョン**での観測だった。`cowork-upe-probe`（UserPromptExpansion + SessionStart/UserPromptSubmit の control + slash 起動 skill）を **GUI marketplace 経由**で Windows・macOS の両方に入れて再検証した：
+
+| 観測 | Windows Cowork | macOS Cowork |
+|---|---|---|
+| plugin の install / enable | **成功**（`Plugin validation failed` は出ない） | **成功** |
+| `UPE_PROBE_SESSIONSTART=ok`（SessionStart control） | 出る | 出る |
+| `UPE_PROBE_PROMPTSUBMIT=ok`（UserPromptSubmit control） | 出る | 出る |
+| **`UPE_PROBE_EXPANSION=fired`（UserPromptExpansion）** | **出る（発火）** | **出る（発火）** |
+
+Windows は session-export の hook 記録で裏取り済み（`hookEvent=UserPromptExpansion`、stdout `UPE_PROBE_EXPANSION=fired\r\n`、exit 0、type `hook_success`）。macOS は in-chat 報告。
+
+**2 つの更新**：
+
+1. **発火**：「UserPromptExpansion は CLI のみで発火」は誤り。**両 OS の Cowork でも slash 起動で発火し、stdout も context に surface する**（UPE は SessionStart / UserPromptSubmit と並んで stdout が context に入る event なので、発火は session-export 無しでも in-chat で観測できる）。§1.9・付録 B の「CLI のみ」表記を更新。
+2. **validator**：UserPromptExpansion 入り plugin が **GUI marketplace 経由なら両 OS で install できる**。§2.3 #6「reject」は、少なくとも GUI marketplace 経路／現行バージョンでは成立しない。切り分け候補：(a) zip-upload と GUI marketplace で validation 経路が違う、(b) バージョン間で validator が緩和された——どちらかは未確定だが、install 成功と発火は事実。
+
+実用含意：従来「Cowork 配布版では hooks.json から UserPromptExpansion を除外」としていたが、**GUI marketplace 配布なら除外不要で、slash 経路の hook として機能する**。zip-upload 配布での reject 可能性は残るので、zip 配布なら従来どおり除外が無難。
 
 ### 実装例：Cowork で reject される plugin の例
 
@@ -2531,7 +2551,7 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 | skill description | `${CLAUDE_*}` や `<...>` を避ける |
 | state 永続化 | Cowork では `${CLAUDE_PLUGIN_DATA}` の write は届かない、`/tmp` も不可。stdout → additionalContext 経路のみ |
 | `PreToolUse:Bash` block | plugin-level なら Cowork でも効く（inline 実装・`${CLAUDE_PLUGIN_ROOT}` 外部スクリプト/redirect 不可）。frontmatter PreToolUse:Skill は Cowork で効かない |
-| `UserPromptExpansion` event | Cowork validator が reject するので、Cowork 配布版では hooks.json から除外 |
+| `UserPromptExpansion` event | GUI marketplace 経由なら両 OS で install 可・発火する（§2.3bis）。zip-upload 配布では reject される可能性が残るので、zip 配布時のみ除外 |
 | 削除操作 | 接続フォルダでも `rm` は不可。一時ファイルは作らない |
 | userConfig | Cowork では UI が無い。CLI のみで使う設定として割り切る |
 | 実機テスト | CLI で `claude plugin validate` PASS + Cowork で zip upload PASS + 実機 invoke で挙動確認、の 3 段 |
@@ -2550,12 +2570,12 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 | 観測したい状況 | 自然言語経由 | slash 経由 | nested skill chain |
 |---|:---:|:---:|:---:|
 | `PreToolUse:Skill` で skill 起動を catch | ✅ | ❌ | ✅（子 skill のみ） |
-| `UserPromptExpansion` で slash を catch | ❌ | ✅（CLI のみ） | ❌ |
+| `UserPromptExpansion` で slash を catch | ❌ | ✅（CLI / Cowork、§2.3bis） | ❌ |
 | `UserPromptSubmit` で根プロンプトを catch | ✅ | ✅ | ✅（根のみ） |
 
 要点：
 - 単一の hook では全経路を carry できない
-- 両方仕込んでも、Cowork では `UserPromptExpansion` が validator reject される
+- ~~両方仕込んでも、Cowork では `UserPromptExpansion` が validator reject される~~ → GUI marketplace 経由なら Cowork でも install 可・発火する（§2.3bis）。zip-upload では reject の可能性が残る
 - nested-skill chain（skill が別 skill を呼ぶ）の追跡は hook 側では結局困難
 - hook は **plugin-local**。複数 plugin / マシン横断で集計するなら、ログ集約パイプラインを自前で立てる必要あり
 
