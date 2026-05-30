@@ -2090,7 +2090,7 @@ Cowork 運用：
 
 ### 実用上の対策
 
-- Cowork で長期的な guard を仕掛けたいなら frontmatter hook ではなく plugin-level hook を使う（§2.10 の訂正の通り、plugin-level PreToolUse block は Cowork でも効く。ただし `${CLAUDE_PLUGIN_ROOT}` で外部スクリプトを呼ばず inline で書くこと）
+- Cowork で長期的な guard を仕掛けたいなら frontmatter hook ではなく plugin-level hook を使う（§2.10 の訂正の通り、plugin-level PreToolUse block は Cowork でも効く。ただし `${CLAUDE_PLUGIN_ROOT}` で外部スクリプトを呼ばず、block ロジックを `bash -c '...'` で wrap して書くこと。top-level 直書きは cmd.exe が実行して動かない、§2.10 追検証）
 - 「user の bash 試行を guard したい」系の plugin は Cowork で実質機能不能
 - 諦めて skill body の冒頭でチェックを書く、または各 skill に inline で同じガードを置く
 
@@ -2144,6 +2144,22 @@ CLI でも Cowork でも、3 方式すべてが Bash tool 実行を阻止し、c
 
 matcher は CLI (`Bash`) と Cowork (`mcp__workspace__bash`) の両対応で `Bash|mcp__workspace__bash`（§2.11）。
 
+### 追検証：「inline」では足りず `bash -c` wrap が必須（PreToolUse も cmd.exe 実行）（2026-05-30, `cowork-pretooluse-shell-probe/`）
+
+§2.2bis で SessionStart hook が cmd.exe 実行と確定したが、**PreToolUse hook も同じく cmd.exe で実行される**ことを session-export で確認した：
+
+| PreToolUse hook command | session-export stdout | 判定 |
+|---|---|---|
+| `echo PRE_HOME=$HOME` | `PRE_HOME=$HOME\r\n` | literal + CRLF → cmd.exe |
+| `echo PRE_DQ="double-quoted"` | `PRE_DQ="double-quoted"\r\n` | quote 残存 → cmd.exe |
+| `echo PRE_NUL=$NO_SUCH_VAR_EXPECT_EMPTY` | `PRE_NUL=$NO_SUCH_VAR_EXPECT_EMPTY\r\n` | literal → cmd.exe |
+| `bash -c 'echo PRE_BASH_HOME=$HOME ...'` | `PRE_BASH_HOME=/home/kazukinagata ...\n` | WSL2 bash に降りる |
+| top-level `tool_input=$(cat); echo "$tool_input" \| grep -q 'PROBE_BLOCK_TRIGGER' && echo '{block}'` | stderr: `'tool_input' は…認識されていません`（cmd.exe の "not recognized as a command"）, exit 255 | **block 不発、Bash 素通り（in-chat でも ran）** |
+
+これは上の「block ロジックは inline で書く」の **inline の意味を厳密化する**。効いた `cowork-blockmethods-probe` の実装例（上）は block ロジックを **`bash -c '...'` で wrap** していた（`case` 文で `|`/`&&` を避けている）。だから cmd.exe を経由しても最終的に WSL2 bash で `$(cat)`/`case`/`echo {json}`/`exit 2` が動き、block が emit されていた。逆に、block ロジックを **`bash -c` で包まず top-level に直書き**すると cmd.exe が実行するため、`$(cat)` や `| grep` が動かず block が一切出ない（上表の最終行が実証）。
+
+訂正の要点：§2.10 の「inline で書く」は「外部スクリプトを使わない」意味としては正しいが、**`bash -c '...'` wrap までを含意する**。とくに JSON を echo する block（`decision` / `permissionDecision`）は、cmd.exe だと single-quote が残って無効 JSON になるため wrap が必須。`|` / `&&` は cmd.exe 側に漏れて壊れるので、上の実装例のように `case` で分岐するのが安定。
+
 ### skill-to-skill block（frontmatter PreToolUse:Skill）も Cowork では効かない（2026-05-27 実測で訂正）
 
 以前は「skill frontmatter の `PreToolUse:Skill` による skill-to-skill block は Cowork でも生存（§1.11 ベースで動く）」と記述していたが、これは CLI 挙動からの**未検証の類推**だった。専用 probe (`cowork-block-probe/`) で実測した結果、**Cowork では frontmatter PreToolUse:Skill の block decision も honor されない**ことが確定した。
@@ -2159,7 +2175,7 @@ Cowork では Skill tool 呼び出し自体は起きているのに block が無
 
 ### 実用上の含意
 
-- **「危険な bash コマンドを plugin が事前に止める」系の guard は、plugin-level PreToolUse hook なら Cowork でも効く**（§2.10 の訂正）。ただし block ロジックは hook command に inline で書くこと（`${CLAUDE_PLUGIN_ROOT}` 経由の外部スクリプトは Cowork で見つからず block が emit されない／redirect は §2.8 footgun で出力が消える）
+- **「危険な bash コマンドを plugin が事前に止める」系の guard は、plugin-level PreToolUse hook なら Cowork でも効く**（§2.10 の訂正）。ただし block ロジックは `bash -c '...'` で wrap して書くこと（top-level 直書きは cmd.exe が実行して `$(cat)`/`grep`/JSON echo が動かず block が出ない、§2.10 追検証／`${CLAUDE_PLUGIN_ROOT}` 経由の外部スクリプトは Cowork で見つからず block が emit されない／redirect は §2.8 footgun で出力が消える）
 - **skill-to-skill block（frontmatter PreToolUse:Skill）は Cowork では動かない**（2026-05-27 実測。frontmatter hook がそもそも発火しないため。CLI では動く）
 - まとめると Cowork の block は **plugin-level PreToolUse = 効く / frontmatter PreToolUse = 効かない** の二分。guard は plugin-level に inline で実装する
 
