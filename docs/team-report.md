@@ -1548,6 +1548,35 @@ EXP_BASH_BRACE=/usr/local/sbin:/usr/local/bin:...         ← 展開されてい
 
 副次（機構4 の CLI/Cowork 差）：`echo` を exec form の `command` に直書きすると、**CLI では `/bin/echo` に解決して動くが Cowork では解決しない**。exec form の command 解決層も Cowork では別挙動。実用上は exec form で何か実行したいなら `command:"bash"`（確実に解決できる名前）+ ロジックを `args:["-c","..."]` に寄せる形が唯一安定だが、上記の通り placeholder/env はどのみち Cowork では空なので、結局 §2.2 の「静的 echo のみ」方針に帰着する。
 
+#### session-export 訂正：実体は cmd.exe、exec-form path placeholder は「empty」でなく「BS 消失の Windows host パス」（2026-05-30, `session-export-1780099387966.zip`）
+
+上の Cowork 観測（context への surface だけ見たもの）を host 側 ground truth（transcript jsonl の hook attachment + `logs/cowork_host_loop_debug.log`）で詰めたところ、**「空×空」という機序の記述は不正確**だったので訂正する。最終結論（plugin-level hook で使える plugin root は得られない）は不変だが、原因が違う。
+
+**(1) shell form の実体は Windows cmd.exe（§2.2 の (a)/(b) 保留を解決 → (c) cmd.exe）**
+
+host debug ログに直接 `[DEBUG] Using bash path: "<drv>:\WINDOWS\system32\cmd.exe"`。shell form（`command` のみ）の string はこの cmd.exe に渡る。バイト列で 2 層が確定：
+
+| command | stdout（生バイト） | 実行体 |
+|---|---|---|
+| `echo MP_DA_HOME=$HOME`（shell form） | `MP_DA_HOME=$HOME\r\n` | **cmd.exe**（CRLF + `$HOME` literal + `"..."` 保持） |
+| `bash -c 'echo MP_DA_BASH_HOME=$HOME'` | `MP_DA_BASH_HOME=/home/kazukinagata\n` | **WSL2 bash**（LF + POSIX 展開） |
+
+cmd.exe が捌き、`bash` を呼んだ時だけ WSL2 bash に降りる。これで §2.1/§2.2/disambig の全観測（`$VAR` literal、quote 非除去、CRLF、`&&`/`||` の挙動）が cmd.exe 1 つで説明できる。docs は「Windows shell form = Git Bash / PowerShell」と書くが、本検証機の実体は **cmd.exe**（新たな docs 乖離）。
+
+**(2) `absent)'` 残骸の正体**：`bash -c '...$(...) && echo present || echo absent'`（**single quote**）を cmd.exe が通すと、cmd は `'` を引用符扱いしないため `()`/`&&`/`||` が cmd に露出し、bash には壊れた断片が渡る → stdout `absent)'\r\n` + stderr `/bin/bash: -c: line 1: unexpected EOF while looking for matching '`。`bash -c "..."`（**double quote**）は cmd が group するので動く（§2.2「&& が動くようになった」が double-quote 例だったことと整合）。
+
+**(3) exec form の機序（「空×空」の訂正）**：exec form は host 側で libuv `uv_spawn` により実行され、`command` を **Windows host PATH** で実行可能ファイルとして解決していた。host stderr で確定：
+
+| exec form エントリ | host stderr / 結果 | 真相 |
+|---|---|---|
+| `command:"echo"` | `Executable not found in $PATH: "echo"`（exit 1） | 本物の exec form。host PATH に `echo.exe` が無く失敗（docs の Windows caveat 通り。機構4 の正体） |
+| `command:"${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh"` | `Failed to run: EFTYPE: inappropriate file type or format, uv_spawn`（exit 1） | host で `.sh` を直接 spawn 不可（docs「exec form は実 .exe が要る」通り。execdirect 失敗の正体） |
+| `command:"bash", args:["${CLAUDE_PLUGIN_ROOT}/hooks/exec-marker.sh","execbash"]` | `/bin/bash: C:UsersknagaAppDataRoamingClaude…rpmplugin_013z…/hooks/exec-marker.sh: No such file`（exit 127） | **path-form placeholder は実値に解決していた**：`C:\Users\knaga\AppData\Roaming\Claude\local-agent-mode-sessions\<sid>\<sub>\rpm\plugin_013zHvvEU4maULmB3Spa6kKz`（Windows host パス）。ただし **`\` が全消失**して `C:Usersknaga…` となり WSL2 bash が開けず失敗 |
+
+→ 訂正：機構3（script 起動）失敗の真因は **「placeholder が empty」ではなく「Windows host パスに解決 → バックスラッシュ消失 → WSL2 の path namespace で無効」**。empty だったのは **裸の `${CLAUDE_PLUGIN_ROOT}`（非 path 形、`EXEC_ARGS_PLACEHOLDER=[]`）と env export（printenv 空）だけ**。path 形 `${CLAUDE_PLUGIN_ROOT}/...` は値を持つ（が使えない形に化ける）。
+
+**含意の更新**：Cowork で plugin root を hook から使えない根本理由は「値が無い」ではなく「**(i) env には export されない／(ii) path 形 placeholder は Windows host パスに解決されるが `\` 消失 + Windows↔WSL namespace 越境で機能しない／(iii) exec form の command は host で resolve されるため .sh 直 spawn 不可・WSL バイナリ前提も崩れる**」の複合。「静的 echo のみ」方針は依然有効だが、理由は §2.1 の env strip に加えて **path namespace 越境とバックスラッシュ消失**が主因。これは将来 launcher 側で path 変換（Windows→WSL の `/mnt/c/...` 化 + BS 保持）が入れば改善し得る、という意味で「empty で詰み」より見通しが明るい。
+
 ### §2.2bis hook 失敗のデバッグ：session-export zip（2026-05-29 新規）
 
 「Cowork で hook が silent に失敗する」というのは context への surface 観点では事実だが、**Claude Desktop は host 側に全 hook 実行の構造化記録を残している**。手段：
