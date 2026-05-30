@@ -1,0 +1,6 @@
+{
+  "name": "cowork-pretooluse-shell-probe",
+  "version": "0.1.0",
+  "description": "Determines whether Cowork runs plugin-level PreToolUse hook commands through Windows cmd.exe (like SessionStart, proven via session-export) or a POSIX shell. Also tests whether the inline block pattern tool_input=$(cat); ... | grep -q X && echo '{block}' actually blocks the bash tool on Cowork. Observation is via session-export (PreToolUse stdout is not surfaced to context) plus the in-chat block/ran outcome.",
+  "author": { "name": "kazukinagata" }
+}

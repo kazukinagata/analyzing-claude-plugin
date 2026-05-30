@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__workspace__bash",
+        "hooks": [
+          { "type": "command", "command": "echo PRE_CONTROL=static_no_var" },
+          { "type": "command", "command": "echo PRE_HOME=$HOME" },
+          { "type": "command", "command": "echo PRE_DQ=\"double-quoted\"" },
+          { "type": "command", "command": "echo PRE_NUL=$NO_SUCH_VAR_EXPECT_EMPTY" },
+          { "type": "command", "command": "bash -c 'echo PRE_BASH_HOME=$HOME EXEC_HOST=$(hostname)'" },
+          { "type": "command", "command": "tool_input=$(cat); echo \"$tool_input\" | grep -q 'PROBE_BLOCK_TRIGGER' && echo '{\"decision\":\"block\",\"reason\":\"PRE_S5_PATTERN blocked\"}' || true" }
+        ]
+      }
+    ]
+  }
+}

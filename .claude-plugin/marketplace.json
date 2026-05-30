@@ -102,6 +102,11 @@
       "name": "cowork-exec-form-probe",
       "source": "./cowork-exec-form-probe",
       "description": "Tests hook command exec form (args present) on Cowork: whether ${CLAUDE_PLUGIN_ROOT} resolves to a real path via launcher text pre-substitution vs env-var export, where shell form (§2.1/§2.2) failed both."
+    },
+    {
+      "name": "cowork-pretooluse-shell-probe",
+      "source": "./cowork-pretooluse-shell-probe",
+      "description": "Tests whether Cowork runs plugin-level PreToolUse hook commands through cmd.exe (like SessionStart) or a POSIX shell, and whether the inline tool_input=$(cat)|grep&&echo-block pattern actually blocks the bash tool."
     }
   ]
 }
