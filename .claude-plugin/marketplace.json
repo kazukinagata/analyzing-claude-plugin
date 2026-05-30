@@ -107,6 +107,11 @@
       "name": "cowork-pretooluse-shell-probe",
       "source": "./cowork-pretooluse-shell-probe",
       "description": "Tests whether Cowork runs plugin-level PreToolUse hook commands through cmd.exe (like SessionStart) or a POSIX shell, and whether the inline tool_input=$(cat)|grep&&echo-block pattern actually blocks the bash tool."
+    },
+    {
+      "name": "cowork-upe-probe",
+      "source": "./cowork-upe-probe",
+      "description": "Tests whether a plugin-level UserPromptExpansion hook fires on Cowork (slash-invoked), with SessionStart/UserPromptSubmit controls. Windows: expected validator reject (§2.3); macOS: may install, letting firing be observed for the first time."
     }
   ]
 }

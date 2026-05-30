@@ -1,0 +1,6 @@
+{
+  "name": "cowork-upe-probe",
+  "version": "0.1.0",
+  "description": "Tests whether a plugin-level UserPromptExpansion hook fires on Cowork when a skill is invoked via slash. Includes SessionStart and UserPromptSubmit controls (both surface stdout to context). On Windows the Cowork validator is expected to reject the whole plugin (§2.3, never installed so firing was untestable); on macOS the validator may accept it, letting us observe firing for the first time.",
+  "author": { "name": "kazukinagata" }
+}
