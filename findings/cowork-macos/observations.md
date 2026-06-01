@@ -321,3 +321,45 @@ verdict（**確定**）:
 - 事前置換が env 非依存（quote 非依存の真の pre-sub）である点も CLI/Windows と一致。
 ```
 
+---
+
+## OBS-12 — `cowork-data-persist-probe:data-persist`（§2.11 DATA の chat 跨ぎ永続性）
+
+- 日時: 2026-06-01 / 環境: macOS Claude Desktop / Cowork
+- probe: 新規作成（marketplace install, `-inline` data dir）
+- 取得元: 2 つの**別々の新規 chat**の SessionStart hook output（host 側, persist.sh）
+
+session #1（新規 chat）:
+```
+DP_DATA_PATH=/var/folders/ph/.../T/claude-hostloop-plugins/204f0ef144e5bc9d/plugins/data/cowork-data-persist-probe-inline
+DP_MARKER reached=yes argv0=[.../269fad70eb95fa56/hooks/persist.sh] DATA_ENV=[.../204f0ef144e5bc9d/plugins/data/cowork-data-persist-probe-inline] HOST=[<mac-host>.local] SID=[no-sid]
+DP_DATA_HASH=[3332818876]
+DP_PRIOR_COUNT=[0]
+DP_AFTER_WRITE_TOTAL=[1]
+DP_READBACK_LAST=[sid=no-sid at=2026-06-01T09:14:29+09:00 data_hash=3332818876]
+```
+
+session #2（**別の**新規 chat）:
+```
+DP_DATA_PATH=/var/folders/ph/.../T/claude-hostloop-plugins/2e745a6fa79381d7/plugins/data/cowork-data-persist-probe-inline
+DP_MARKER reached=yes argv0=[.../269fad70eb95fa56/hooks/persist.sh] DATA_ENV=[.../2e745a6fa79381d7/plugins/data/cowork-data-persist-probe-inline] HOST=[<mac-host>.local] SID=[no-sid]
+DP_DATA_HASH=[220578915]
+DP_PRIOR_COUNT=[0]
+DP_AFTER_WRITE_TOTAL=[1]
+DP_READBACK_LAST=[sid=no-sid at=2026-06-01T09:15:38+09:00 data_hash=220578915]
+```
+
+verdict（**確定**）:
+- **`$CLAUDE_PLUGIN_DATA` に永続化した値は Cowork の chat session を跨いで参照できない**。
+  session #2 で `PRIOR_COUNT=0`（session #1 の marker が見えない）、`DP_DATA_HASH` が `3332818876`→`220578915` と変化。
+- 真因: **DATA dir の親ハッシュが chat ごとにローテーション**（`204f0ef144e5bc9d`→`2e745a6fa79381d7`）。
+  パス末尾は両 session とも同名 `cowork-data-persist-probe-inline` で「永続しそう」に見えるが、親が回るので別ディレクトリ。
+- 対照的に **`persist.sh` の hooks staging ハッシュ（`269fad70eb95fa56`）は両 session で同一** =
+  ROOT/hooks の staging は安定、**DATA だけ per-chat で分離**。
+- → **§2.11「Cowork は DATA を chat session ごとに分離」は Mac でも成立。✅ SAME（確定）**。
+  これは OS 非依存の Cowork アーキ由来（Windows と同じ結論）。
+- 副次発見: Mac Cowork の **hook env では `CLAUDE_SESSION_ID` が未設定**（`SID=[no-sid]`）。
+  CLI（SID あり）と異なる。session 識別子を hook 側で得る用途には使えない。
+- 含意: **Cowork では plugin state を `CLAUDE_PLUGIN_DATA` に置いても次の chat で消える**（cache/一時データ用途のみ）。
+  これは Mac/Windows 共通。永続が必要なら DATA に依存しない設計が必要、という plugin 設計結論を Mac でも裏付け。
+

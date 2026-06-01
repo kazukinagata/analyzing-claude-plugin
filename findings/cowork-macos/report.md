@@ -172,11 +172,11 @@ MP_SCRIPT_MARKER form=topbare  reached=yes argv0=[/var/folders/ph/.../T/claude-h
 未実施（任意・優先度低）: `cowork-presub`/`cowork-expansion`（§2 の裏取り. disambig で多点確定済みのため冗長）/
 userConfig を settings.json 手動注入したとき Mac の hook env に届くか.
 
-未実施（新規・要実機）: **`cowork-data-persist-probe`** — `$CLAUDE_PLUGIN_DATA` に永続化した値が
-**Cowork の chat session を跨いで残るか**（§2.11 DATA isolation の Mac 版）. OBS-1/3/11 で DATA の
-**パス値**（host 側 `/var/folders/.../plugins/data/<plugin>-inline`）と **body 置換値** は確定済みだが、
-**別 chat を跨いだ永続性は未観測**. write+read-back は VM body では不可（DATA unset）なので SessionStart
-hook(host)側の `persist.sh` で実施する設計. 別 chat を 2 回開いて `DP_PRIOR_COUNT` と `DP_DATA_HASH` を比較する.
+**完了（OBS-12, 2026-06-01）**: **`cowork-data-persist-probe`** — `$CLAUDE_PLUGIN_DATA` に永続化した値は
+**Cowork の chat session を跨いで参照できない**ことを確定. 別 chat 2 回で `DP_PRIOR_COUNT=0` のまま・
+`DP_DATA_HASH` が変化（DATA dir 親ハッシュ `204f0ef1`→`2e745a6f` がローテーション）. ROOT/hooks staging
+ハッシュ（`269fad70`）は両 session で同一 = **ROOT は安定 / DATA だけ per-chat 分離**. → §2.11 と同じ ✅ SAME.
+副次発見: Mac Cowork の hook env は **`CLAUDE_SESSION_ID` 未設定**（`SID=[no-sid]`, CLI と相違）. 詳細は OBS-12.
 
 ---
 
@@ -206,6 +206,8 @@ hook(host)側の `persist.sh` で実施する設計. 別 chat を 2 回開いて
 
 - **§4 hook(host) と Bash tool(VM=`claude`) の filesystem 分割**（hook が書いた `/tmp` を Bash tool は読めない）.
 - **§3 skill body の置換構造**（host path に化ける / VM Bash 不可 / Read tool 可）— 違いはパスの文字列形式だけ.
+- **§2.11 `CLAUDE_PLUGIN_DATA` の chat 跨ぎ分離**（OBS-12）— 永続化した値は別 chat で参照不可. DATA dir 親ハッシュが
+  per-chat でローテーション（ROOT/hooks staging ハッシュは安定）. plugin state を DATA に置いても次の chat で消えるのは Mac/Win 共通.
 - **§5 plugin-level PreToolUse block**（decision / permissionDecision / exit2 の 3 方式とも honor）.
 - **§6 Bash tool 名 `mcp__workspace__bash`**（matcher 両対応が必要なのは同じ）.
 - **§7 userConfig 入力 UI 不在 / unset entry の silent skip / 機密 body block 文字列**.
