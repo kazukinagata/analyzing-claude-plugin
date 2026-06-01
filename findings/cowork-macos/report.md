@@ -172,6 +172,12 @@ MP_SCRIPT_MARKER form=topbare  reached=yes argv0=[/var/folders/ph/.../T/claude-h
 未実施（任意・優先度低）: `cowork-presub`/`cowork-expansion`（§2 の裏取り. disambig で多点確定済みのため冗長）/
 userConfig を settings.json 手動注入したとき Mac の hook env に届くか.
 
+未実施（新規・要実機）: **`cowork-data-persist-probe`** — `$CLAUDE_PLUGIN_DATA` に永続化した値が
+**Cowork の chat session を跨いで残るか**（§2.11 DATA isolation の Mac 版）. OBS-1/3/11 で DATA の
+**パス値**（host 側 `/var/folders/.../plugins/data/<plugin>-inline`）と **body 置換値** は確定済みだが、
+**別 chat を跨いだ永続性は未観測**. write+read-back は VM body では不可（DATA unset）なので SessionStart
+hook(host)側の `persist.sh` で実施する設計. 別 chat を 2 回開いて `DP_PRIOR_COUNT` と `DP_DATA_HASH` を比較する.
+
 ---
 
 ## 5. 確定結論

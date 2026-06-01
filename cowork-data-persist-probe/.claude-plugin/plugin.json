@@ -1,0 +1,6 @@
+{
+  "name": "cowork-data-persist-probe",
+  "version": "0.1.0",
+  "description": "Tests whether a value persisted to $CLAUDE_PLUGIN_DATA from a plugin-level SessionStart hook (host side) survives across Cowork chat sessions. The write + read-back runs in the hook (not the skill body) because on Mac Cowork only the host hook has CLAUDE_PLUGIN_DATA set; the VM Bash tool has it unset. The hook appends a per-session marker and surfaces the accumulated history so cross-session persistence can be read directly from the SessionStart context.",
+  "author": { "name": "kazukinagata" }
+}
