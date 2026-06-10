@@ -2422,10 +2422,11 @@ CLI の `claude plugin validate` で warning のみで通る違反項目を、Co
 | 3 | YAML single-quoted string の closing quote 漏れ | ✅ forgiving parser が受理 | ❌ strict parser が reject |
 | 4 | skill `description:` 内の `${CLAUDE_*}` substitution markers | ✅ | ❌ reject |
 | 5 | skill `description:` 内の `<...>` angle brackets | ✅ | ❌ reject |
-| 6 | `UserPromptExpansion` event entry | ✅ | ⚠ **要更新**（旧: reject。2026-05-30 の再検証では Windows/macOS とも install 成功＋発火し、reject を再現せず、§2.3bis） |
+| 6 | `UserPromptExpansion` event entry | ✅ | ❌ **zip-upload のみ reject** / marketplace は install 可・発火（経路差。§2.3ter で確定） |
 | 7 | skill body / frontmatter command content の累積 threshold | ✅ | ❌（具体閾値未特定） |
+| 8 | zip 内の非 ASCII（日本語）ファイル名 | ✅ | ❌ zip-upload で reject（`zip file contains path with invalid characters`。§2.3ter） |
 
-すべて **`Plugin validation failed`** の generic メッセージで返ってくる。理由表示なし。
+すべて **`Plugin validation failed`** の generic メッセージで返ってくる。理由表示なし（#8 のみ別文言）。
 
 ### §2.3bis 追検証：UserPromptExpansion は install 可・発火する（2026-05-30, `cowork-upe-probe/`、Windows + macOS）
 
@@ -2446,6 +2447,22 @@ Windows は session-export の hook 記録で裏取り済み（`hookEvent=UserPr
 2. **validator**：今回の再検証では UserPromptExpansion 入り plugin が **両 OS で install/enable できた**。§2.3 #6「reject」は今回再現しなかった。旧 reject 観測（probe 20、zip-upload、旧バージョン）と今回（marketplace、現行バージョン）の差が**経路差なのか版差なのかは未確認**（zip-upload を現行バージョンで再検証していないため断定できない）。確かなのは「今回は両 OS で install でき、UPE も発火した」ことだけ。
 
 実用含意：従来「Cowork 配布版では hooks.json から UserPromptExpansion を除外」としていたが、**今回の検証では除外せずとも両 OS で install でき、slash 経路の hook として機能した**。ただし §2.3 #6 の reject 観測が完全に解消したと断定できる材料はまだ無い（旧観測との差が経路差か版差か未確認）ので、確実性を優先する配布では従来どおり除外しておくのが無難。
+
+### §2.3ter 追検証：reject は経路差と確定（2026-06-11、Windows、同日・同一バージョン）
+
+§2.3bis で未確定だった「旧 reject は経路差か版差か」を、**同日・同一の Claude Desktop で zip-upload と marketplace の両経路**を試して切り分けた（Desktop バージョン文字列は未採取・日付で特定）：
+
+| 経路 | plugin | 結果 |
+|---|---|---|
+| zip-upload | `upe-min-control`（plugin.json + SessionStart のみ、4ファイル） | **install 成功** |
+| zip-upload | `upe-min-test`（同一 + UserPromptExpansion エントリ1個だけ追加） | **`Plugin validation failed`** |
+| marketplace（GUI listing から install） | `cowork-upe-probe`（UPE + control 2種） | **install 成功 + 3マーカー全部発火**（`UPE_PROBE_EXPANSION=fired` 含む） |
+
+最小ペアの差分は hooks.json の UserPromptExpansion エントリのみなので、zip-upload の reject 原因は UPE と確定。同日の marketplace 経由では同イベント入り plugin が install・発火しているため、**§2.3 #6 の reject は「zip-upload 経路の validator だけが UserPromptExpansion を弾く」経路差**と確定した（版差説は棄却。zip-upload の reject は旧バージョンでも現行でも再現している）。
+
+おまけの新 finding（上表 #8）：zip-upload は**非 ASCII（日本語）ファイル名**も `zip file contains path with invalid characters` で reject する。日本語ファイル名 11 件を含む実プラグイン（gops-toolkit）が、同名ファイル除外だけで install 可になることをバイセクトで確認（フォルダ構造の有無は無関係。flat 展開でも可）。marketplace 経路で日本語ファイル名が通るかは未検証。
+
+実用含意（§2.3bis の含意を更新）：**marketplace 配布なら UserPromptExpansion の除外は不要**（install 可・発火する）。除外が必要なのは zip-upload 配布のみ。zip 配布ではさらに非 ASCII ファイル名も除外が必要。
 
 ### 実装例：Cowork で reject される plugin の例
 
@@ -2551,7 +2568,7 @@ echo "Pre-check passed (note: this doesn't catch the content threshold)"
 | skill description | `${CLAUDE_*}` や `<...>` を避ける |
 | state 永続化 | Cowork では `${CLAUDE_PLUGIN_DATA}` の write は届かない、`/tmp` も不可。stdout → additionalContext 経路のみ |
 | `PreToolUse:Bash` block | plugin-level なら Cowork でも効く（inline 実装・`${CLAUDE_PLUGIN_ROOT}` 外部スクリプト/redirect 不可）。frontmatter PreToolUse:Skill は Cowork で効かない |
-| `UserPromptExpansion` event | 今回の再検証では両 OS で install 可・発火（§2.3bis）。ただし旧 reject 観測との差は未確認なので、確実性重視なら除外も検討 |
+| `UserPromptExpansion` event | marketplace 配布なら除外不要（install 可・発火、§2.3bis/§2.3ter）。zip-upload 配布のみ reject されるため除外が必要 |
 | 削除操作 | 接続フォルダでも `rm` は不可。一時ファイルは作らない |
 | userConfig | Cowork では UI が無い。CLI のみで使う設定として割り切る |
 | 実機テスト | CLI で `claude plugin validate` PASS + Cowork で zip upload PASS + 実機 invoke で挙動確認、の 3 段 |

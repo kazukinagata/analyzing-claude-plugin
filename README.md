@@ -103,7 +103,7 @@ claude prompt 内で：
 | `${VAR}` 事前置換 allowlist | tier ごとに別 allowlist で運用、skill frontmatter は `${CLAUDE_PLUGIN_ROOT}` のみ | team-report §1.2 |
 | `sensitive: true` の skill body block | Claude Code 本体が `[sensitive option 'KEY' not available in skill content]` に置換して leak を防ぐ | team-report §1.4 |
 | Cowork architecture | 3 層（Windows ホスト → 本検証機では WSL2 Ubuntu → host-adjacent VM + virtio-fs）。plugin-level hook はホスト側シェル（WSL2）、Bash tool は VM 側。WSL 部分はこのマシン固有 | team-report §2.0 |
-| Cowork validator | CLI より厳しい：kebab-case 強制、description 内の `${...}`/`<...>` 拒否（UserPromptExpansion は再検証で install 可・発火を確認、reject 再現せず、§2.3bis で更新） | team-report §2.16 |
+| Cowork validator | CLI より厳しい：kebab-case 強制、description 内の `${...}`/`<...>` 拒否、zip-upload のみ UserPromptExpansion と非 ASCII ファイル名を拒否（marketplace は UPE install 可・発火。経路差、§2.3ter） | team-report §2.16 |
 | OTel `skill_activated` | `invocation_trigger=user-slash/claude-proactive/nested-skill` で 3 経路完全区別、Cowork でも emit | team-report Appendix B |
 
 ## ライセンス
