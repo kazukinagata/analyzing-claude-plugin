@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo 'UC2-CTL shell_form_static=alive'" },
+          { "type": "command", "command": "echo", "args": ["UC2-CTL exec_form_static=alive"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC opt_plain=[${user_config.opt_plain}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC req_plain=[${user_config.req_plain}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC opt_secret=[${user_config.opt_secret}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC req_secret=[${user_config.req_secret}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC def_plain=[${user_config.def_plain}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC num_opt=[${user_config.num_opt}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC bool_opt=[${user_config.bool_opt}]"] },
+          { "type": "command", "command": "echo", "args": ["UC2-EXEC multi_opt=[${user_config.multi_opt}]"] },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/dump-opts.sh\"" }
+        ]
+      }
+    ]
+  }
+}

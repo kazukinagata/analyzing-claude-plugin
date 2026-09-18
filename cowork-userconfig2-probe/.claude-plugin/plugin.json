@@ -1,0 +1,56 @@
+{
+  "name": "cowork-userconfig2-probe",
+  "version": "0.2.0",
+  "description": "Re-probe of userConfig against the post-2.1.207 spec: shell-form hooks now REJECT ${user_config.*} while exec form substitutes it, values reach hooks as CLAUDE_PLUGIN_OPTION_<KEY>, and non-sensitive values substitute in skill/agent content. Declares every documented option field (type string/number/boolean, required, sensitive, default, multiple, min/max) so the input UI itself can be inspected on Claude Desktop Code vs Cowork.",
+  "author": { "name": "kazukinagata" },
+  "userConfig": {
+    "opt_plain": {
+      "type": "string",
+      "title": "Optional plain",
+      "description": "non-sensitive optional. Enter: OPTPLAIN-VAL"
+    },
+    "req_plain": {
+      "type": "string",
+      "title": "Required plain",
+      "description": "non-sensitive required. Enter: REQPLAIN-VAL",
+      "required": true
+    },
+    "opt_secret": {
+      "type": "string",
+      "title": "Optional secret",
+      "description": "sensitive optional (dummy value only). Enter: OPTSECRET-VAL",
+      "sensitive": true
+    },
+    "req_secret": {
+      "type": "string",
+      "title": "Required secret",
+      "description": "sensitive required (dummy value only). Enter: REQSECRET-VAL",
+      "sensitive": true,
+      "required": true
+    },
+    "def_plain": {
+      "type": "string",
+      "title": "Defaulted plain",
+      "description": "LEAVE THIS EMPTY - tests whether the manifest default is applied at runtime",
+      "default": "DEFAULT-FROM-MANIFEST"
+    },
+    "num_opt": {
+      "type": "number",
+      "title": "Number option",
+      "description": "number type with bounds. Enter: 42",
+      "min": 1,
+      "max": 100
+    },
+    "bool_opt": {
+      "type": "boolean",
+      "title": "Boolean option",
+      "description": "boolean type. Turn it ON (true)"
+    },
+    "multi_opt": {
+      "type": "string",
+      "title": "Multiple strings",
+      "description": "string with multiple:true. Enter two entries: M1 and M2",
+      "multiple": true
+    }
+  }
+}

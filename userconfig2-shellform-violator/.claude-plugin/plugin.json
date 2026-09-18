@@ -1,0 +1,13 @@
+{
+  "name": "userconfig2-shellform-violator",
+  "version": "0.2.0",
+  "description": "Isolated violator: a SHELL-FORM hook command that references ${user_config.*}. Post-2.1.207 the docs say such a component fails with an error instead of running. Kept as a separate plugin so the failure cannot take down cowork-userconfig2-probe.",
+  "author": { "name": "kazukinagata" },
+  "userConfig": {
+    "vio_plain": {
+      "type": "string",
+      "title": "Violator plain",
+      "description": "non-sensitive. Enter: VIOPLAIN-VAL"
+    }
+  }
+}

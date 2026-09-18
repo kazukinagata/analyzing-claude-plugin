@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo 'VIO-CTL before=alive'" },
+          { "type": "command", "command": "echo 'VIO-SHELL vio_plain=[${user_config.vio_plain}]'" },
+          { "type": "command", "command": "echo 'VIO-CTL after=alive'" }
+        ]
+      }
+    ]
+  }
+}
