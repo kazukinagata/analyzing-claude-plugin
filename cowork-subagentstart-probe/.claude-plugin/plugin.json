@@ -1,0 +1,8 @@
+{
+  "name": "cowork-subagentstart-probe",
+  "version": "0.1.0",
+  "description": "Does a plugin-level SubagentStart hook fire on Cowork, and does its JSON additionalContext reach the subagent? Compares plain stdout, matcher-less JSON and matcher-scoped JSON in one launch; a PostToolUse replay of a host exec log separates never-fired from fired-but-dropped.",
+  "author": {
+    "name": "kazukinagata"
+  }
+}

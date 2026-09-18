@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "echo 'SA-CTL sessionstart_shell_form=alive'" },
+          { "type": "command", "command": "echo", "args": ["SA-CTL sessionstart_exec_form=alive"] }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "echo 'SA-PLAIN plain_stdout=fired'" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/emit-json.sh\"" }
+        ]
+      },
+      {
+        "matcher": "sa-reporter",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/emit-matched.sh\"" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "echo 'SA-STOP subagentstop=fired'" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/replay-log.sh\"" }
+        ]
+      }
+    ]
+  }
+}

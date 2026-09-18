@@ -363,3 +363,123 @@ verdict（**確定**）:
 - 含意: **Cowork では plugin state を `CLAUDE_PLUGIN_DATA` に置いても次の chat で消える**（cache/一時データ用途のみ）。
   これは Mac/Windows 共通。永続が必要なら DATA に依存しない設計が必要、という plugin 設計結論を Mac でも裏付け。
 
+
+---
+
+## OBS-13: Cowork のアップロード validator は plugin.json の `description` が長いと拒否する（詳細メッセージ無し）
+
+**probe**: `cowork-subagentstart-probe`（SubagentStart の additionalContext 検証用）+ 2 段のラダー
+
+**症状**: 本体 zip をアップロードすると `Plugin failed validation with 1 error.`。
+エラー詳細は表示されない（§2.3 の「Cowork は原因を出さない」と同じ）。
+ローカル CLI（2.1.238）の `claude plugin validate` は同じ plugin を **pass** する。
+
+**切り分け（累積ラダー、1 ラング = 1 要素追加）**:
+
+| ラング | 追加要素 | Cowork |
+|---|---|---|
+| l0 skill + SessionStart(shell form) | — | PASS |
+| l1 +`agents/*.md` | | PASS |
+| l2 +`"${CLAUDE_PLUGIN_ROOT}/hooks/*.sh"` 起動 | | PASS |
+| l3 +PostToolUse(matcher `Agent\|Task`) | | PASS |
+| l4 +**SubagentStop** | | PASS |
+| l5 +**SubagentStart**（matcher 無し） | | PASS |
+| l6 +SubagentStart の matcher | | PASS |
+| l7 +exec form（`command`+`args`） | | PASS |
+| l8 +同梱スクリプトを SubagentStart/PostToolUse に配線 | | PASS |
+| l9 +**長い `description`（521 文字）** | | **FAIL** |
+
+**verdict**:
+- **`SubagentStart` / `SubagentStop` / `PostToolUse(Agent|Task)` の各 event は Cowork validator に受理される**
+  （＝ UserPromptExpansion §2.3 のような event 単位の拒否ではない）。発火するかは別問題で、これから計測する。
+- 落ちていたのは **`plugin.json` の `description` の長さ**。他の要素（agent ファイル、exec form、
+  `${CLAUDE_PLUGIN_ROOT}` スクリプト起動、matcher）はすべて無罪。
+- 既知の長さデータ点: 430 / 431 / 458 文字は Cowork にインストール済み（exec-form / userconfig2 /
+  data-persist probe）、**521 文字で FAIL**。→ 閾値は (458, 521]。500 が最有力。
+- **遡及的な含意**: 過去に「原因不明で Cowork validation failed」としていた
+  `cowork-mcp-tool-hook-probe`（description **821 文字**）は、`type: mcp_tool` hook が原因ではなく
+  **description 長で落ちていた可能性が高い**。mcp_tool hook の可否は未決として再測定が必要。
+
+**採用値**: 閾値は **500 文字**とみなして運用する（458 PASS / 521 FAIL の間、切りの良い値）。
+厳密な確定（500 vs 501、および長さではなく文字種の可能性）は未測定のまま保留。
+`scripts/package-desc-length-bisect.sh` が 480/500/501/512 文字＋句読点対照の zip を生成する。
+
+**plugin 設計への含意**: Cowork 配布を前提にするなら `plugin.json` の `description` は
+**400 文字台以下に抑える**（詳細は SKILL.md 側に書く）。超えるとエラー内容が出ないまま install 不能になる。
+
+---
+
+## OBS-14: SubagentStart は Cowork で発火し、`additionalContext`（JSON）だけが subagent に届く。生 stdout は捨てられる
+
+**probe**: `cowork-subagentstart-probe`（`/cowork-subagentstart-probe:sa-check`）
+**環境**: Claude Desktop Cowork, macOS, plugin runtime `2.1.275`。**ローカル実行とリモート実行の 2 回**を実施。
+
+### 生ログの在り処（再現用）
+
+- ローカル実行: `~/Library/Application Support/Claude/local-agent-mode-sessions/<space>/<user>/<sandbox>/.claude/projects/session/<sid>.jsonl`
+  と、subagent 専用の `.../<sid>/subagents/agent-<id>.jsonl`（+ `.meta.json`）。**subagent の context が完全な形で残る**。
+- リモート実行: ローカルには transcript が無い。claude.ai の会話キャッシュ
+  `~/Library/Application Support/Claude/IndexedDB/https_claude.ai_0.indexeddb.blob/<n>/<nn>/<n>`
+  に V8 シリアライズで入っており、文字列 dedup のため**断片的にしか読めない**（決定的な行は復元可能）。
+
+### 結果
+
+ローカル実行の subagent transcript（`agent-*.jsonl`）が構造まで見せてくれた:
+
+```
+[1] attachment hook_success            hookEvent=SubagentStart  stdout="SA-PLAIN plain_stdout=fired"   rendered なし
+[2] attachment hook_success            hookEvent=SubagentStart  stdout={"hookSpecificOutput":{...}}     rendered なし
+[3] attachment hook_additional_context hookEvent=SubagentStart  rendered あり:
+      <system-reminder>
+      SubagentStart hook additional context: SA-JSON additional_context=delivered channel=matcherless ...
+      </system-reminder>
+```
+
+**`rendered` の有無 = モデルの context に入るかどうか**で、event ごとに違う:
+
+| event | attachment 種別 | `rendered` | モデルに届くか |
+|---|---|---|---|
+| SessionStart | `hook_success`（生 stdout） | あり | **届く** |
+| SubagentStart | `hook_success`（生 stdout） | なし | **届かない** |
+| SubagentStart | `hook_additional_context`（JSON） | あり | **届く**（subagent 側） |
+| PostToolUse | `hook_success`（生 stdout） | なし | 届かない |
+| SubagentStop | `hook_success`（生 stdout） | なし | 届かない |
+
+ローカル / リモートの実測値:
+
+| 観測点 | ローカル実行 | リモート実行 |
+|---|---|---|
+| `SA-JSON`（additionalContext） | **届いた** | **届いた** |
+| hook 実行ホスト | `host=[KazukinoMacBook-Pro.local]`（Mac ホスト） | **`host=[vm]`（クラウド VM）** |
+| stdin payload | 836 bytes | 437 bytes |
+| `plugin_root_set` | yes | yes |
+| `session`（`CLAUDE_SESSION_ID`） | unset | unset |
+| `SA-PLAIN`（生 stdout） | ABSENT | ABSENT |
+| `SA-MATCHED`（matcher 付き entry） | ABSENT（`emit-matched.sh` 未実行） | ABSENT（同） |
+| `SA-EXECLOG` | `count=[1]`（emit-json のみ） | `count=[1]`（同） |
+| `SA-STOP` | 発火（ただしモデルには不可視） | 発火 |
+
+### verdict
+
+1. **`SubagentStart` は Cowork で発火する。`hookSpecificOutput.additionalContext` で返した文字列は
+   subagent の context に `<system-reminder>` として注入される。** ローカル実行・リモート実行の両方で成立。
+2. **生 stdout（`echo` だけの hook）は subagent に届かない。** 実行はされ transcript にも残るが、
+   モデルには渡らない。SubagentStart で subagent に情報を渡すなら **JSON 形式が必須**。
+   SessionStart の「stdout がそのまま context に乗る」挙動を SubagentStart に外挿してはいけない。
+3. **matcher `"sa-reporter"` はマッチしなかった**（両環境で `emit-matched.sh` が一度も実行されず）。
+   transcript 上の hook 名は `SubagentStart:cowork-subagentstart-probe:sa-reporter` で
+   **plugin 名で名前空間化された完全名**。素の agent 名では引っかからない。
+   完全名 / 正規表現 / `*` のどれが通るかは**未測定**（追加プローブは見送り）。
+   → 実用上は **matcher を付けず、必要な分岐は hook スクリプト側で stdin payload を見て行う**のが安全。
+4. **hook の実行場所は実行モードで変わる**: ローカル実行では Mac ホスト、リモート実行では VM 内（`host=[vm]`）。
+   `CLAUDE_PLUGIN_ROOT` はどちらでも set されており、`"${CLAUDE_PLUGIN_ROOT}/hooks/x.sh"` 形式の起動は両方で成功。
+   stdin payload のサイズが違う（836 / 437）ので、payload の中身は環境依存と考えるべき。
+5. `CLAUDE_SESSION_ID` は SubagentStart hook env でも未設定（OBS-12 と同じ）。
+   `CLAUDE_PLUGIN_DATA` への write → 同一セッション内の read back は成功（cross-session は OBS-12 の通り不可）。
+
+### plugin 設計への含意
+
+- subagent に文脈を注入したいなら **SubagentStart + JSON `additionalContext` が唯一の経路**。
+- hook の「実行された証拠」をモデルに見せる目的で PostToolUse / SubagentStop の stdout に頼るのは無効
+  （transcript には残るが context には入らない）。デバッグは transcript を直接読むこと。
+- matcher は当てにせず、SubagentStart は matcher 無しで受けて中で振り分ける。

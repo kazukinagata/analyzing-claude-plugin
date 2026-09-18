@@ -117,6 +117,26 @@
       "name": "cowork-data-persist-probe",
       "source": "./cowork-data-persist-probe",
       "description": "Tests whether a value persisted to $CLAUDE_PLUGIN_DATA from a plugin-level SessionStart hook survives across Cowork chat sessions. Write+read-back runs in the host hook (persist.sh) because the VM body has DATA unset; surfaces accumulated per-session markers so cross-session persistence is read from SessionStart context."
+    },
+    {
+      "name": "cowork-mcp-tool-hook-probe",
+      "source": "./cowork-mcp-tool-hook-probe",
+      "description": "Tests whether a type=mcp_tool hook (invokes a bundled MCP server tool instead of a shell command) is accepted by the Cowork validator and fires on Mac Cowork. Bundles a dependency-free stdio MCP server (marker-server/record_marker) that returns additionalContext JSON so MCP_TOOL_HOOK_FIRED surfaces in context; mcp_tool hooks ride UserPromptSubmit/PostToolUse with command-type controls for isolation."
+    },
+    {
+      "name": "cowork-userconfig2-probe",
+      "source": "./cowork-userconfig2-probe",
+      "description": "userConfig re-probe for the post-2.1.207 spec: exec-form ${user_config.*} substitution, CLAUDE_PLUGIN_OPTION_<KEY> env in hooks, skill/agent content substitution, and the manifest `default` field. Declares every documented option field (string/number/boolean, required, sensitive, default, multiple, min/max) so the input UI can be compared between Claude Desktop Code and Cowork."
+    },
+    {
+      "name": "userconfig2-shellform-violator",
+      "source": "./userconfig2-shellform-violator",
+      "description": "Isolated violator: a shell-form hook command referencing ${user_config.*}, which post-2.1.207 should fail with an error instead of running. Separate plugin so the failure cannot take down cowork-userconfig2-probe; control entries before/after detect collateral damage."
+    },
+    {
+      "name": "cowork-subagentstart-probe",
+      "source": "./cowork-subagentstart-probe",
+      "description": "Does a plugin-level SubagentStart hook fire on Cowork, and does its JSON additionalContext reach the subagent? Compares plain stdout, matcher-less JSON and matcher-scoped JSON in one launch."
     }
   ]
 }
