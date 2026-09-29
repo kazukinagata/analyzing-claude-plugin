@@ -1,0 +1,65 @@
+[
+  {
+    "source_line": 13,
+    "timestamp": "2026-09-29T23:30:48.17Z",
+    "hook_id": "621e6296-adad-4c6e-bab9-7973743a4a25",
+    "stdout": "R2_SHELL_BEGIN\nC:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/fee811d1-83d8-420f-bcaa-79199650d487/64e1cdfd-e87f-495a-9275-693bd8d6f659/rpm/plugin_01QJzSfF7ucrpWz9AUCexPki\nC:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/fee811d1-83d8-420f-bcaa-79199650d487/64e1cdfd-e87f-495a-9275-693bd8d6f659/513436fe/.claude/plugins/data/cowork-exec-env-retest-inline\nC:/Users/knaga/AppData/Roaming/Claude/local-agent-mode-sessions/fee811d1-83d8-420f-bcaa-79199650d487/64e1cdfd-e87f-495a-9275-693bd8d6f659/513436fe/host-cwd\n",
+    "stderr": "",
+    "exit_code": 0,
+    "outcome": "success"
+  },
+  {
+    "source_line": 20,
+    "timestamp": "2026-09-29T23:30:48.66Z",
+    "hook_id": "e77ee6a4-adf3-4ee0-ac30-2c4cc385f3d2",
+    "stdout": "R2_DATA_BEGIN\n",
+    "stderr": "",
+    "exit_code": 1,
+    "outcome": "error"
+  },
+  {
+    "source_line": 21,
+    "timestamp": "2026-09-29T23:30:48.83Z",
+    "hook_id": "7f908224-1a15-4623-b474-f5d4c736efe8",
+    "stdout": "R2_PROJECT_BEGIN\n",
+    "stderr": "",
+    "exit_code": 1,
+    "outcome": "error"
+  },
+  {
+    "source_line": 22,
+    "timestamp": "2026-09-29T23:30:49.006Z",
+    "hook_id": "51f9fe9f-4c20-4f9c-bfd4-fa6108178e08",
+    "stdout": "R2_ROOT_BEGIN\n",
+    "stderr": "",
+    "exit_code": 1,
+    "outcome": "error"
+  },
+  {
+    "source_line": 23,
+    "timestamp": "2026-09-29T23:30:49.146Z",
+    "hook_id": "c0410ce5-74b3-4527-82ef-bc740abce9b0",
+    "stdout": "R2_ENV_BEGIN\n",
+    "stderr": "",
+    "exit_code": 1,
+    "outcome": "error"
+  },
+  {
+    "source_line": 24,
+    "timestamp": "2026-09-29T23:30:49.266Z",
+    "hook_id": "cdcd6440-feff-46a1-9603-ef93215fdf77",
+    "stdout": "R2_EXEC_CONTROL\n",
+    "stderr": "",
+    "exit_code": 0,
+    "outcome": "success"
+  },
+  {
+    "source_line": 25,
+    "timestamp": "2026-09-29T23:30:49.302Z",
+    "hook_id": "3c634fd5-ab62-4cec-9e9f-44797b561a44",
+    "stdout": "R2_ORIGINAL_ROOT=[] DATA=[] PROJECT=[]\n",
+    "stderr": "",
+    "exit_code": 0,
+    "outcome": "success"
+  }
+]

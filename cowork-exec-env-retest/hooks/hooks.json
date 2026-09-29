@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [
+      {"type":"command","command":"bash","args":["-c","echo R2_EXEC_CONTROL"]},
+      {"type":"command","command":"bash","args":["-c","echo \"R2_ORIGINAL_ROOT=[$(printenv CLAUDE_PLUGIN_ROOT)] DATA=[$(printenv CLAUDE_PLUGIN_DATA)] PROJECT=[$(printenv CLAUDE_PROJECT_DIR)]\""]},
+      {"type":"command","command":"bash","args":["-c","echo R2_ROOT_BEGIN; printenv CLAUDE_PLUGIN_ROOT"]},
+      {"type":"command","command":"bash","args":["-c","echo R2_DATA_BEGIN; printenv CLAUDE_PLUGIN_DATA"]},
+      {"type":"command","command":"bash","args":["-c","echo R2_PROJECT_BEGIN; printenv CLAUDE_PROJECT_DIR"]},
+      {"type":"command","command":"bash","args":["-c","echo R2_ENV_BEGIN; env | grep -E '^CLAUDE_(PLUGIN_ROOT|PLUGIN_DATA|PROJECT_DIR)='"]},
+      {"type":"command","command":"echo R2_SHELL_BEGIN; printenv CLAUDE_PLUGIN_ROOT CLAUDE_PLUGIN_DATA CLAUDE_PROJECT_DIR"}
+    ]}]
+  }
+}

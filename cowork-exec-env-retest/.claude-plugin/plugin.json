@@ -1,0 +1,5 @@
+{
+  "name": "cowork-exec-env-retest",
+  "version": "0.1.0",
+  "description": "Recheck hook environment without command substitution."
+}

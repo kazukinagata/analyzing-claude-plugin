@@ -6,7 +6,7 @@ Date: 2026-09-30 JST. Claude Desktop package observed: 2.16120.0.0; local Cowork
 
 The five existing probes were packaged without source changes as `dist/<probe>-20260930.zip`, with manifest/hooks/skills at archive root, and uploaded together through Customize → Plugins → Upload. All five showed Added. They and the minimal SessionStart canary were enabled simultaneously, alongside existing user plugins. Each numbered test used a fresh task; prefixes distinguish the probes. This differs from the originally proposed separate-plugin upload procedure and is not an isolated single-plugin reproduction.
 
-Steps 1–3 were observed from Claude's desktop response reporting received hook context. Hooks were not rerun to fabricate missing output. Runtime logs/session exports were not inspected, so missing SessionStart output does not independently establish an execution failure. Step 4 was additionally verified by expanding all four actual Bash request/result cards in the UI. Steps 5–7 were not run. Probe plugins remain installed/enabled.
+Initially, steps 1–3 were observed from Claude's desktop response reporting received hook context. Hooks were not rerun to fabricate missing output. Subsequently, the user requested runtime-log inspection: per-task `audit.jsonl` hook responses were inspected for all five tasks, including stdout/stderr/exit_code, and the block-test tool results were checked in the audit log. See `runtime-log-review.md` and `hook-log-evidence.json`. Step 4 was also verified by expanding all four actual Bash request/result cards in the UI. Steps 5–7 were not run. Probe plugins remain installed/enabled.
 
 ## 1. Environment propagation
 
@@ -65,7 +65,9 @@ EXEC_ENV_ROOT=[] EXEC_ENV_DATA=[] EXEC_ENV_PROJ=[]
 EXEC_HOST=LAPTOP-BKGB6100 EXEC_WSL_LIB=present EXEC_MNT_C=present
 ```
 
-Not received: `EXEC_MARKER form=execdirect`, `EXEC_MARKER form=execbash`, `EXEC_ECHO_BUILTIN=`. Thus command/args form works for at least the Bash control, but plugin environment/path handling is not equivalent to shell form. Present WSL markers suggest a WSL route for this form. The empty positional argument alone does not identify which expansion layer produced it. Missing markers are unresolved without runtime stderr/exit logs; do not label them proven launch failures.
+A subsequent fresh probe used direct printenv and an env filter without command substitution. Audit logs confirmed the three variables are absent in that command/args Bash environment, rather than set to empty strings. Shell-form values were present in the same task. See `exec-env-retest.md`.
+
+Not received: `EXEC_MARKER form=execdirect`, `EXEC_MARKER form=execbash`, `EXEC_ECHO_BUILTIN=`. Subsequent audit inspection established launch failures: direct script execution returned exit_code 1 with `EFTYPE: inappropriate file type or format, uv_spawn`; Bash script execution returned 127 with a populated but malformed Windows path and `No such file or directory`; direct echo returned 1 with `Executable not found in $PATH: "echo"`. These were not successful outputs lost in delivery. The Bash stderr contains an installed plugin path, so an empty environment variable is not a sufficient explanation for that failure. Command/args form works for at least the Bash control, but environment propagation, native script execution and path handling differ from shell form. Present WSL markers suggest a WSL route for Bash. The exact launcher expansion/quoting implementation remains unverified.
 
 ## 4. Plugin PreToolUse blocking
 
@@ -84,4 +86,4 @@ The exit-2 error identified `cowork-blockmethods-probe@inline` as its source in 
 
 ## Outcome
 
-The old broad conclusion that Windows Cowork plugin hooks do not work no longer describes this environment. Shell-form SessionStart context, environment expansion, bundled scripts, and plugin PreToolUse blocking worked in these tests. Command/args form still has distinct environment/path behavior requiring further diagnosis. Await user instruction before steps 5–7.
+The old broad conclusion that Windows Cowork plugin hooks do not work no longer describes this environment. Shell-form SessionStart context, environment expansion, bundled scripts, and plugin PreToolUse blocking worked in these tests. Command/args form has confirmed launch failures with distinct causes, alongside empty plugin environment variables. Exact launcher internals require further diagnosis. Await user instruction before steps 5–7.

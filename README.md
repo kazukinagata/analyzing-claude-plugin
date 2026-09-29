@@ -12,10 +12,12 @@ Claude Desktop **2.16120.0.0** のローカル Cowork に ZIP で probe をア�
 | 環境変数 | shell形式のhookではROOT/DATA/PROJECTが設定済み。sandbox Bashでは未設定 |
 | 引用符・変数展開 | 引用符の処理とHOME/PATH展開が成功。Git Bash/MSYS系の実行環境を示す出力 |
 | bundled script | shell形式で直接起動・bash経由とも成功 |
-| command＋args形式 | Bash対照は成功。ROOT/DATA/PROJECTは空、スクリプト成功マーカーは未確認。WSL側を示す出力 |
+| command＋args形式 | Bash対照は成功。独立したprintenvとenvによる再試験でBash内のROOT/DATA/PROJECT未設定を確認。ログで直接.shの形式エラー・bash経由のパス破損・echoの実行ファイル未検出を確認。WSL側を示す出力 |
 | plugin PreToolUse | `decision:block`・`permissionDecision:deny`・exit 2の3方式ともブロック。対照だけ実行 |
 
-詳細は [最小SessionStart追試](findings/windows-20260930/sessionstart-retest.md) と [追試1〜4の記録](findings/windows-20260930/followup-1-4.md)。3方式のブロックは実際のツール要求・結果カードでも確認しました。SessionStartは画面上の応答を根拠としており、runtime logは未確認です。5つのprobeを同時に有効化したため、単独pluginでの再現ではありません。skill frontmatter・環境ファイル・永続化・resume等の追試5〜7は未実施です。
+詳細は [最小SessionStart追試](findings/windows-20260930/sessionstart-retest.md)、[追試1〜4の記録](findings/windows-20260930/followup-1-4.md)、[実行ログによる確認と原因の訂正](findings/windows-20260930/runtime-log-review.md)。画面確認後、各タスクの監査ログでstdout/stderr/終了コードとブロック結果を確認しました。5つのprobeを同時に有効化したため、単独pluginでの再現ではありません。skill frontmatter・環境ファイル・永続化・resume等の追試5〜7は未実施です。
+
+追加の [環境変数再試験](findings/windows-20260930/exec-env-retest.md) では新規pluginでコマンド置換を避けて直接読み取り、ログから「空文字」ではなく対象Bash環境での「未設定」を確認しました。
 
 以下と `docs/team-report.md` の旧Cowork記述は当時の検証環境における履歴です。特に「env strip」「PreToolUse blockの無効化」「hookはWSLで実行」を現在のWindows Cowork全般の仕様として扱わないでください。
 

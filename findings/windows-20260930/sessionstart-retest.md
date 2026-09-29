@@ -23,7 +23,7 @@ COWORK_SESSIONSTART_20260930_f7c2a91e
 
 It reported that this arrived as SessionStart hook output labelled `SessionStart:startup hook success`. It also noted that the hook context appeared in the same message as the skill call, after the skill text, rather than in an earlier message.
 
-Observed via the desktop screenshot. Session export and runtime logs were not inspected. Therefore this establishes the minimal command/context canary, not environment propagation, script execution, other events or permission enforcement. Startup initially remained at `Starting up...`; its delay was not classified as hook failure.
+Initially observed via the desktop screenshot. Subsequent audit-log inspection confirmed the exact marker with outcome=success, exit_code 0, and empty stderr; see `runtime-log-review.md` and `hook-log-evidence.json`. This establishes the minimal command/context canary, not environment propagation, script execution, other events or permission enforcement. Startup initially remained at `Starting up...`; its delay was not classified as hook failure.
 
 ## Follow-up sequence
 
