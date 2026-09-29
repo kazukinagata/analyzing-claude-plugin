@@ -1,0 +1,6 @@
+{
+  "name": "cowork-sessionstart-retest",
+  "version": "0.1.0",
+  "description": "Minimal SessionStart hook retest for Windows Cowork.",
+  "author": { "name": "kazukinagata" }
+}

@@ -1,5 +1,7 @@
 # Claude Code Plugin 作成ガイド — CLI と Cowork の挙動差分まとめ
 
+> **2026-09-30 Windows Cowork追試による更新**：Claude Desktop 2.16120.0.0のZIPアップロードでは、shell形式のSessionStartにROOT/DATA/PROJECTが渡り、変数展開とbundled script起動が成功しました。plugin PreToolUseの `decision:block`・`permissionDecision:deny`・exit 2も3方式すべてブロックしました。command＋args形式では環境変数が空で、shell形式と異なる実行環境を示す結果でした。本本文の旧env strip・block無効化・WSL実行の記述は当時の観測として保存しています。現在の挙動と証拠の限界は [追試1〜4](../findings/windows-20260930/followup-1-4.md) と [SessionStart canary](../findings/windows-20260930/sessionstart-retest.md) を参照してください。追試5〜7は未実施です。
+
 ## この文書の目的
 
 Claude Code（Anthropic 公式 CLI / Claude Desktop アプリ）には plugin 機構があり、プロジェクト固有の skill（指示書）や hook（バックグラウンド処理）を定義できる。ところが公式 docs には書かれていない仕様や、ドキュメントと挙動が矛盾する箇所が多数あり、plugin を実装すると「動くはずなのに動かない」「CLI では動くのに Cowork（Claude Desktop の VM 実行モード）では動かない」といった事象に頻繁にぶつかる。

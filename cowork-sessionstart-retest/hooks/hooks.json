@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo COWORK_SESSIONSTART_20260930_f7c2a91e",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -2,6 +2,23 @@
 
 Claude Code plugin 機構の挙動を **22 個の probe skill で実機検証**し、公式ドキュメントには書かれていない仕様や、ドキュメントと挙動が矛盾する箇所を洗い出したレポジトリ。
 
+## Windows Cowork 追試（2026-09-30）
+
+Claude Desktop **2.16120.0.0** のローカル Cowork に ZIP で probe をアップロードして再検証した結果、以前の環境変数・スクリプト起動・ブロックに関する観測から変化を確認しました。
+
+| 検証 | 今回の結果 |
+|---|---|
+| 最小 SessionStart | 固有マーカーがコンテキストに届いた |
+| 環境変数 | shell形式のhookではROOT/DATA/PROJECTが設定済み。sandbox Bashでは未設定 |
+| 引用符・変数展開 | 引用符の処理とHOME/PATH展開が成功。Git Bash/MSYS系の実行環境を示す出力 |
+| bundled script | shell形式で直接起動・bash経由とも成功 |
+| command＋args形式 | Bash対照は成功。ROOT/DATA/PROJECTは空、スクリプト成功マーカーは未確認。WSL側を示す出力 |
+| plugin PreToolUse | `decision:block`・`permissionDecision:deny`・exit 2の3方式ともブロック。対照だけ実行 |
+
+詳細は [最小SessionStart追試](findings/windows-20260930/sessionstart-retest.md) と [追試1〜4の記録](findings/windows-20260930/followup-1-4.md)。3方式のブロックは実際のツール要求・結果カードでも確認しました。SessionStartは画面上の応答を根拠としており、runtime logは未確認です。5つのprobeを同時に有効化したため、単独pluginでの再現ではありません。skill frontmatter・環境ファイル・永続化・resume等の追試5〜7は未実施です。
+
+以下と `docs/team-report.md` の旧Cowork記述は当時の検証環境における履歴です。特に「env strip」「PreToolUse blockの無効化」「hookはWSLで実行」を現在のWindows Cowork全般の仕様として扱わないでください。
+
 検証対象：
 - **Claude Code CLI**: v2.1.143 → v2.1.146 → v2.1.150
 - **Claude Desktop / Cowork**: v2.1.146-149（host-adjacent VM 側）

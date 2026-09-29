@@ -8,6 +8,7 @@
 - **`cli-help/`**: `capture-cli-help.sh` の出力。実装の最初に1回だけ生成
 - **`expected/`**: 各 probe の expected 文字列。バージョンに依らない（commit 対象）
 - **`v<VERSION>/`**: バージョン別の実行結果。`hooks.log` / `probe.log` / `report.md` / `<sid>/...`
+- **[`windows-20260930/`](windows-20260930/followup-1-4.md)**: Windows Claude Desktop 2.16120.0.0 / CoworkのZIP hook追試。最小SessionStartと追試1〜4の画面観測・結果・未検証範囲。
 
 ## 命名規則
 
